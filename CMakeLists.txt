@@ -17,6 +17,8 @@ add_executable(ricochet
     src/session.cpp
     src/relay.h
     src/relay.cpp
+    src/repo.h
+    src/repo.cpp
     src/server.cpp
 )
 

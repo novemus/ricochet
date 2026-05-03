@@ -26,20 +26,21 @@ enum class schema : uint8_t
 enum class failure : uint8_t
 {
     server_error = 0,
-    unavalable_proto = 1,
-    malformed_couple = 2,
+    malformed_query = 1,
+    unavalable_proto = 2,
     limit_reached = 3
 };
 
 struct buffer
 {
     buffer() = default;
+    explicit buffer(std::size_t size) : m_data(size) {}
     buffer(const std::vector<uint8_t>& data) : m_data(data) {}
-    virtual ~buffer() = default;
 
+    void resize(std::size_t size) { m_data.resize(size); }
+    std::size_t size() const { return m_data.size(); }
     uint8_t* data() { return m_data.data(); }
     const uint8_t* data() const { return m_data.data(); }
-    size_t size() const { return m_data.size(); }
 
 protected:
 
@@ -80,8 +81,12 @@ struct query : public buffer
 
     using value = std::variant<protocol, couple>;
 
-    kind type();
-    value payload();
+    kind type() const;
+    value payload() const;
+    uint32_t length() const;
+
+    query() = default;
+    explicit query(const buffer& data);
 
     static query make_provide_query(protocol proto);
     static query make_connect_query(const boost::asio::ip::address& addr_one, uint16_t port_one, schema role_one,
@@ -99,8 +104,12 @@ struct reply : public buffer
 
     using value = std::variant<endpoint, failure, bool>;
 
-    kind type();
-    value payload();
+    kind type() const;
+    value payload() const;
+    uint32_t length() const;
+
+    reply() = default;
+    explicit reply(const buffer& data);
 
     static reply make_binding_reply(const boost::asio::ip::address& addr, uint16_t port);
     static reply make_mistake_reply(failure err);

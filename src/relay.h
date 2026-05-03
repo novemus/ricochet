@@ -5,18 +5,26 @@
 
 namespace ricochet {
 
+class protocol_unavailable : public std::runtime_error
+{
+public:
+    explicit protocol_unavailable(const std::string& msg)
+        : std::runtime_error(msg) {}
+};
+
 struct relay
 {
     virtual ~relay() {}
     virtual endpoint bind() const = 0;
     virtual void start(const endpoint& one_loc, schema one_role,
-               const endpoint& two_loc, schema two_role) = 0;
+                       const endpoint& two_loc, schema two_role) = 0;
     virtual void close() = 0;
+    virtual protocol get_protocol() const = 0;
 };
 
 class tcp_relay : public relay, public std::enable_shared_from_this<tcp_relay>
 {
-    boost::asio::ip::tcp::acceptor m_acceptor;
+    boost::asio::ip::tcp::acceptor m_server;
     boost::asio::ip::tcp::socket m_one;
     boost::asio::ip::tcp::socket m_two;
     boost::asio::deadline_timer m_timer;
@@ -30,6 +38,7 @@ public:
     void start(const endpoint& one_loc, schema one_role,
                const endpoint& two_loc, schema two_role) override;
     void close() override;
+    protocol get_protocol() const override;
 };
 
 class udp_relay : public relay, public std::enable_shared_from_this<udp_relay>
@@ -48,6 +57,7 @@ public:
     void start(const endpoint& one_loc, schema one_role,
                const endpoint& two_loc, schema two_role) override;
     void close() override;
+    protocol get_protocol() const override;
 };
 
 }

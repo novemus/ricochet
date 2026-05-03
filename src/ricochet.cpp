@@ -1,8 +1,10 @@
 #include "ricochet.h"
 #include <stdexcept>
 #include <cstring>
+#include <arpa/inet.h>
 
 namespace ricochet {
+
 
 boost::asio::ip::address endpoint::address()
 {
@@ -108,43 +110,62 @@ peer couple::two()
     return peer { buffer };
 }
 
-query::kind query::type()
+query::kind query::type() const
 {
     if (m_data.empty())
         throw std::runtime_error("Invalid query data");
 
-    return static_cast<kind>(m_data[0]);
+    return static_cast<kind>(m_data[0]); // Tag is first byte
 }
 
-query::value query::payload()
+query::value query::payload() const
 {
     kind which = type();
 
-    if (m_data.size() < 2)
+    if (m_data.size() < 6) // tag (1) + length (4) + payload (1) minimum
          std::runtime_error("Invalid protocol payload");
 
     if (which == kind::provide)
     {
-        return static_cast<protocol>(m_data[1]);
+        return static_cast<protocol>(m_data[5]); // Skip tag + length
     }
     else if (which == kind::connect)
     {
-        size_t len = m_data[1] == 4 ? 16 : 40;
-        if (m_data.size() < len + 1)
+        size_t len = m_data[5] == 4 ? 16 : 40; // Check address type after tag + length
+        if (m_data.size() < 1 + 4 + len) // tag + length + payload
             throw std::runtime_error("Invalid couple payload");
 
-        std::vector<uint8_t> buffer(m_data.begin() + 1, m_data.begin() + len + 1);
+        std::vector<uint8_t> buffer(m_data.begin() + 5, m_data.begin() + 5 + len); // Skip tag + length
         return couple { buffer };
     }
 
     throw std::runtime_error("Invalid query kind");
 }
 
+query::query(const buffer& data)
+    : buffer(data)
+{
+}
+
+uint32_t query::length() const
+{
+    if (m_data.size() < 5) // tag (1) + length (4) minimum
+        return 0;
+
+    return ntohl(*reinterpret_cast<const uint32_t*>(m_data.data() + 1));
+}
+
 query query::make_provide_query(protocol proto)
 {
     query result;
+    
     result.m_data.push_back(static_cast<uint8_t>(kind::provide));
+    result.m_data.insert(result.m_data.end(), {0, 0, 0, 0});
     result.m_data.push_back(static_cast<uint8_t>(proto));
+
+    uint32_t* ptr = reinterpret_cast<uint32_t*>(&result.m_data[1]);
+    *ptr = htonl(static_cast<uint32_t>(result.m_data.size() - 5));
+
     return result;
 }
 
@@ -152,8 +173,14 @@ query query::make_connect_query(const boost::asio::ip::address& addr_one, uint16
                                 const boost::asio::ip::address& addr_two, uint16_t port_two, schema role_two)
 {
     query result;
+    
+    // Add tag
     result.m_data.push_back(static_cast<uint8_t>(kind::connect));
     
+    // Reserve space for length field (4 bytes)
+    result.m_data.insert(result.m_data.end(), {0, 0, 0, 0});
+    
+    // Add payload data
     if (addr_one.is_v4())
     {
         result.m_data.push_back(4); // IPv4 type
@@ -169,6 +196,7 @@ query query::make_connect_query(const boost::asio::ip::address& addr_one, uint16
     
     result.m_data.push_back(static_cast<uint8_t>((port_one >> 8) & 0xFF));
     result.m_data.push_back(static_cast<uint8_t>(port_one & 0xFF));
+    result.m_data.push_back(static_cast<uint8_t>(role_one));
 
     if (addr_two.is_v4())
     {
@@ -185,39 +213,45 @@ query query::make_connect_query(const boost::asio::ip::address& addr_one, uint16
     
     result.m_data.push_back(static_cast<uint8_t>((port_two >> 8) & 0xFF));
     result.m_data.push_back(static_cast<uint8_t>(port_two & 0xFF));
+    result.m_data.push_back(static_cast<uint8_t>(role_two));
+    
+    // Fill length field using reinterpret_cast for direct memory access
+    uint32_t* ptr = reinterpret_cast<uint32_t*>(&result.m_data[1]);
+    *ptr = htonl(static_cast<uint32_t>(result.m_data.size() - 5));
+    
     return result;
 }
 
-reply::kind reply::type()
+reply::kind reply::type() const
 {
     if (m_data.empty())
         throw std::runtime_error("Invalid reply data");
 
-    return static_cast<kind>(m_data[0]);
+    return static_cast<kind>(m_data[0]); // Tag is first byte
 }
 
-reply::value reply::payload()
+reply::value reply::payload() const
 {
     kind which = type();
     if (which == kind::binding)
     {
-        if (m_data.size() < 2)
+        if (m_data.size() < 6) // tag (1) + length (4) + address type (1) minimum
             throw std::runtime_error("Invalid binding payload");
 
-        size_t len = (m_data[1] == 4) ? 7 : 19;
+        size_t len = (m_data[5] == 4) ? 7 : 19; // Check address type after tag + length
 
-        if (m_data.size() < len + 1)
+        if (m_data.size() < 1 + 4 + len) // tag + length + payload
             throw std::runtime_error("Invalid binding payload");
 
-        std::vector<uint8_t> buffer(m_data.begin() + 1, m_data.begin() + len + 1);
+        std::vector<uint8_t> buffer(m_data.begin() + 5, m_data.begin() + 5 + len); // Skip tag + length
         return endpoint { buffer };
     }
     else if (which == kind::mistake)
     {
-        if (m_data.size() < 2)
+        if (m_data.size() < 6) // tag (1) + length (4) + error code (1)
             throw std::runtime_error("Invalid mistake payload");
 
-        return static_cast<failure>(m_data[1]);
+        return static_cast<failure>(m_data[5]); // Skip tag + length
     }
     else if (which == kind::confirm)
     {
@@ -227,11 +261,30 @@ reply::value reply::payload()
     throw std::runtime_error("Invalid reply kind");
 }
 
+reply::reply(const buffer& data)
+    : buffer(data)
+{
+}
+
+uint32_t reply::length() const
+{
+    if (m_data.size() < 5) // tag (1) + length (4) minimum
+        return 0;
+    
+    return ntohl(*reinterpret_cast<const uint32_t*>(m_data.data() + 1));
+}
+
 reply reply::make_binding_reply(const boost::asio::ip::address& addr, uint16_t port)
 {
     reply result;
+    
+    // Add tag
     result.m_data.push_back(static_cast<uint8_t>(kind::binding));
+    
+    // Reserve space for length field (4 bytes)
+    result.m_data.insert(result.m_data.end(), {0, 0, 0, 0});
 
+    // Add payload data
     if (addr.is_v4())
     {
         result.m_data.push_back(4); // IPv4 type
@@ -248,21 +301,47 @@ reply reply::make_binding_reply(const boost::asio::ip::address& addr, uint16_t p
     result.m_data.push_back(static_cast<uint8_t>((port >> 8) & 0xFF));
     result.m_data.push_back(static_cast<uint8_t>(port & 0xFF));
     
+    // Fill length field using reinterpret_cast for direct memory access
+    uint32_t* ptr = reinterpret_cast<uint32_t*>(&result.m_data[1]);
+    *ptr = htonl(static_cast<uint32_t>(result.m_data.size() - 5));
+    
     return result;
 }
 
 reply reply::make_mistake_reply(failure err)
 {
     reply result;
+    
+    // Add tag
     result.m_data.push_back(static_cast<uint8_t>(kind::mistake));
+    
+    // Reserve space for length field (4 bytes)
+    result.m_data.insert(result.m_data.end(), {0, 0, 0, 0});
+    
+    // Add payload
     result.m_data.push_back(static_cast<uint8_t>(err));
+    
+    // Fill length field using reinterpret_cast for direct memory access
+    uint32_t* ptr = reinterpret_cast<uint32_t*>(&result.m_data[1]);
+    *ptr = htonl(static_cast<uint32_t>(result.m_data.size() - 5));
+    
     return result;
 }
 
 reply reply::make_confirm_reply()
 {
     reply result;
+
+    // Add tag
     result.m_data.push_back(static_cast<uint8_t>(kind::confirm));
+    
+    // Reserve space for length field (4 bytes)
+    result.m_data.insert(result.m_data.end(), {0, 0, 0, 0});
+    
+    // Fill length field using reinterpret_cast for direct memory access
+    uint32_t* ptr = reinterpret_cast<uint32_t*>(&result.m_data[1]);
+    *ptr = htonl(static_cast<uint32_t>(result.m_data.size() - 5));
+    
     return result;
 }
 
