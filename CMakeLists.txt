@@ -4,7 +4,7 @@ project(ricochet VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Boost 1.74 REQUIRED COMPONENTS system unit_test_framework)
+find_package(Boost 1.74 REQUIRED COMPONENTS system unit_test_framework program_options)
 find_package(OpenSSL REQUIRED)
 
 include_directories(${CMAKE_SOURCE_DIR})
@@ -19,7 +19,9 @@ add_executable(ricochet
     src/relay.cpp
     src/repo.h
     src/repo.cpp
+    src/server.h
     src/server.cpp
+    src/main.cpp
 )
 
 target_link_libraries(ricochet ${Boost_LIBRARIES} OpenSSL::Crypto OpenSSL::SSL)

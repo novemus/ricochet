@@ -1,0 +1,59 @@
+#pragma once
+
+#include <boost/asio.hpp>
+#include <boost/asio/ssl.hpp>
+#include <filesystem>
+#include <map>
+#include <set>
+#include <memory>
+#include <mutex>
+#include <repo.h>
+
+namespace ricochet {
+
+struct config
+{
+    boost::asio::ip::tcp::endpoint server_endpoint;
+    std::filesystem::path server_cert;
+    std::filesystem::path server_key;
+    std::filesystem::path client_repo;
+    boost::posix_time::seconds idle_timeout;
+    size_t client_relay_limit;
+    size_t total_relay_limit;
+
+    config() 
+        : server_endpoint()
+        , server_cert("")
+        , server_key("")
+        , client_repo("")
+        , idle_timeout(boost::posix_time::seconds(300))
+        , client_relay_limit(100)
+        , total_relay_limit(1000)
+    {}
+};
+
+class server : public std::enable_shared_from_this<server>
+{
+    config m_config;
+    repository m_repo;
+    boost::asio::io_context& m_io;
+    boost::asio::ssl::context m_ssl;
+    boost::asio::ip::tcp::acceptor m_server;
+    std::map<std::string, std::set<std::shared_ptr<class session>>> m_relays;
+    std::mutex m_mutex;
+
+public:
+
+    server(boost::asio::io_context& io, const config& cfg);
+    ~server();
+
+    void accept();
+    void stop();
+
+private:
+
+    void do_accept();
+    bool check_limits(const std::string& client_hash);
+};
+
+} // namespace ricochet
