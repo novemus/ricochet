@@ -26,7 +26,6 @@ void session::set_cleaner(std::function<void()> clean)
 
 void session::start()
 {
-    start_timer();
     do_read();
 }
 
@@ -38,8 +37,8 @@ void session::close()
 
     if (m_socket.lowest_layer().is_open())
     {
-        m_socket.shutdown(ec);
-        m_socket.lowest_layer().close(ec);
+        ec = m_socket.shutdown(ec);
+        ec = m_socket.lowest_layer().close(ec);
     }
 
     if (m_relay)
@@ -67,12 +66,12 @@ void session::do_read()
                 }
                 else
                 {
-                    close();
+                    send_error_reply(ricochet::failure::server_error);
                 }
             }
             else
             {
-                close();
+                send_error_reply(ricochet::failure::server_error);
             }
         });
 }
@@ -98,12 +97,12 @@ void session::do_read_length()
                 }
                 else
                 {
-                    close();
+                    send_error_reply(ricochet::failure::server_error);
                 }
             }
             else
             {
-                close();
+                send_error_reply(ricochet::failure::server_error);
             }
         });
 }
@@ -122,12 +121,12 @@ void session::do_read_payload(uint32_t length)
                 }
                 else
                 {
-                    close();
+                    send_error_reply(ricochet::failure::server_error);
                 }
             }
             else
             {
-                close();
+                send_error_reply(ricochet::failure::server_error);
             }
         });
 }
@@ -163,13 +162,32 @@ void session::handle_message()
     }
 }
 
-void session::do_write(const ricochet::reply& reply)
+void session::do_write(const ricochet::reply& msg)
 {
     start_timer();
-    boost::asio::async_write(m_socket, boost::asio::buffer(reply.data(), reply.size()),
-        [this, self = shared_from_this()](const boost::system::error_code& ec, std::size_t)
+    boost::asio::async_write(m_socket, boost::asio::buffer(msg.data(), msg.size()),
+        [this, self = shared_from_this(), msg](const boost::system::error_code& ec, std::size_t)
         {
             if (ec)
+            {
+                close();
+            }
+            else if (msg.type() == ricochet::reply::kind::binding)
+            {
+                do_read();
+            }
+            else if (msg.type() == ricochet::reply::kind::confirm)
+            {
+                boost::system::error_code ec;
+                m_timer.cancel(ec);
+
+                if (m_socket.lowest_layer().is_open())
+                {
+                    ec = m_socket.shutdown(ec);
+                    ec = m_socket.lowest_layer().close(ec);
+                }
+            }
+            else if (msg.type() == ricochet::reply::kind::mistake)
             {
                 close();
             }
@@ -183,18 +201,17 @@ void session::handle_provide_query(const ricochet::query& msg)
     {
         case ricochet::protocol::tcp4:
         case ricochet::protocol::tcp6:
-            m_relay = std::make_shared<ricochet::tcp_relay>(proto == ricochet::protocol::tcp6, m_idle);
+            m_relay = std::make_shared<ricochet::tcp_relay>(static_cast<boost::asio::io_context&>(m_socket.get_executor().context()), proto == ricochet::protocol::tcp6, m_idle);
             break;
         case ricochet::protocol::udp4:
         case ricochet::protocol::udp6:
-            m_relay = std::make_shared<ricochet::udp_relay>(proto == ricochet::protocol::udp6, m_idle);
+            m_relay = std::make_shared<ricochet::udp_relay>(static_cast<boost::asio::io_context&>(m_socket.get_executor().context()), proto == ricochet::protocol::udp6, m_idle);
             break;
         default:
             throw malformed_query("Unsupported protocol");
     }
 
-    auto endpoint = m_relay->bind();
-    do_write(ricochet::reply::make_binding_reply(endpoint.address(), endpoint.port()));
+    do_write(ricochet::reply::make_binding_reply(m_relay->get_address(), m_relay->get_port()));
 
     if (m_clean) 
     {
@@ -211,6 +228,24 @@ void session::handle_connect_query(const ricochet::query& msg)
     {
         auto peer_one = payload.one();
         auto peer_two = payload.two();
+        
+        if (peer_one.role() == ricochet::schema::server && peer_one.location().port() == 0)
+        {
+            send_error_reply(ricochet::failure::malformed_query);
+            return;
+        }
+        
+        if (peer_two.role() == ricochet::schema::server && peer_two.location().port() == 0)
+        {
+            send_error_reply(ricochet::failure::malformed_query);
+            return;
+        }
+        
+        if (peer_one.role() == ricochet::schema::server && peer_two.role() == ricochet::schema::server)
+        {
+            send_error_reply(ricochet::failure::malformed_query);
+            return;
+        }
         
         bool peer_one_is_ipv6 = peer_one.location().address().is_v6();
         bool peer_two_is_ipv6 = peer_two.location().address().is_v6();
@@ -233,7 +268,6 @@ void session::handle_connect_query(const ricochet::query& msg)
             peer_two.location(), peer_two.role());
         
         do_write(ricochet::reply::make_confirm_reply());
-        do_read();
     }
     else
     {
@@ -249,7 +283,6 @@ void session::send_error_reply(ricochet::failure error)
 void session::error(ricochet::failure error)
 {
     send_error_reply(error);
-    close();
 }
 
 void session::start_timer()
