@@ -1,12 +1,15 @@
 #pragma once
 
 #include <filesystem>
-#include <map>
 #include <mutex>
 #include <memory>
 #include <string>
 #include <set>
 #include <boost/asio.hpp>
+#include <boost/multi_index_container.hpp>
+#include <boost/multi_index/ordered_index.hpp>
+#include <boost/multi_index/member.hpp>
+#include <boost/multi_index/composite_key.hpp>
 #include <openssl/x509.h>
 #include <openssl/bio.h>
 #include <openssl/sha.h>
@@ -37,11 +40,41 @@ struct BIODeleter
 using X509Ptr = std::unique_ptr<X509, X509Deleter>;
 using BIOPtr = std::unique_ptr<BIO, BIODeleter>;
 
+// Certificate entry for multi-index container
+struct certificate
+{
+    std::string hash;
+    std::filesystem::path path;
+    X509Ptr cert;
+    std::filesystem::file_time_type time;
+
+    certificate(std::string h, std::filesystem::path p, X509Ptr c, std::filesystem::file_time_type t)
+        : hash(std::move(h)), path(std::move(p)), cert(std::move(c)),time(t) {}
+};
+
+// Tags for multi-index indices
+struct by_hash {};
+struct by_path {};
+
 class repository
 {
     std::filesystem::path m_repo;
-    mutable std::map<std::string, X509Ptr> m_cache;
-    mutable std::map<std::string, std::filesystem::file_time_type> m_times;
+
+    // Multi-index container for certificates with hash and path indices
+    mutable boost::multi_index_container<
+        certificate,
+        boost::multi_index::indexed_by<
+            boost::multi_index::ordered_unique<
+                boost::multi_index::tag<by_hash>,
+                boost::multi_index::member<certificate, std::string, &certificate::hash>
+            >,
+            boost::multi_index::ordered_unique<
+                boost::multi_index::tag<by_path>,
+                boost::multi_index::member<certificate, std::filesystem::path, &certificate::path>
+            >
+        >
+    > m_cache;
+
     mutable std::mutex m_mutex;
 
     void update_cache_incremental() const;

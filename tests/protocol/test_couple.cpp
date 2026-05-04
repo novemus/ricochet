@@ -41,13 +41,13 @@ BOOST_AUTO_TEST_CASE(couple_peer_extraction)
     };
     couple c(data);
     
-    peer first = c.one();
-    peer second = c.two();
+    peer red = c.red();
+    peer blue = c.blue();
     
-    BOOST_CHECK_EQUAL(first.size(), 8);
-    BOOST_CHECK_EQUAL(second.size(), 8);
-    BOOST_CHECK(first.data() != nullptr);
-    BOOST_CHECK(second.data() != nullptr);
+    BOOST_CHECK_EQUAL(red.size(), 8);
+    BOOST_CHECK_EQUAL(blue.size(), 8);
+    BOOST_CHECK(red.data() != nullptr);
+    BOOST_CHECK(blue.data() != nullptr);
 }
 
 BOOST_AUTO_TEST_CASE(couple_empty_data)
@@ -68,10 +68,10 @@ BOOST_AUTO_TEST_CASE(couple_minimal_data)
     
     BOOST_CHECK_EQUAL(c.size(), 16);
     
-    peer p1 = c.one();
-    peer p2 = c.two();
-    BOOST_CHECK_EQUAL(p1.size(), 8);
-    BOOST_CHECK_EQUAL(p2.size(), 8);
+    peer red = c.red();
+    peer blue = c.blue();
+    BOOST_CHECK_EQUAL(red.size(), 8);
+    BOOST_CHECK_EQUAL(blue.size(), 8);
 }
 
 BOOST_AUTO_TEST_CASE(couple_ipv6_vector_constructor)
@@ -113,27 +113,27 @@ BOOST_AUTO_TEST_CASE(couple_ipv6_peer_extraction)
     };
     couple c(data);
     
-    peer first = c.one();
-    peer second = c.two();
+    peer red = c.red();
+    peer blue = c.blue();
     
-    BOOST_CHECK_EQUAL(first.size(), 20); // 1 byte type + 16 bytes IPv6 + 2 bytes port + 1 byte role
-    BOOST_CHECK_EQUAL(second.size(), 20);
-    BOOST_CHECK(first.data() != nullptr);
-    BOOST_CHECK(second.data() != nullptr);
+    BOOST_CHECK_EQUAL(red.size(), 20); // 1 byte type + 16 bytes IPv6 + 2 bytes port + 1 byte role
+    BOOST_CHECK_EQUAL(blue.size(), 20);
+    BOOST_CHECK(red.data() != nullptr);
+    BOOST_CHECK(blue.data() != nullptr);
     
-    // Test first peer
-    endpoint first_loc = first.location();
-    BOOST_CHECK(first_loc.address().is_v6());
-    BOOST_CHECK_EQUAL(first_loc.address().to_string(), "::1");
-    BOOST_CHECK_EQUAL(first_loc.port(), 8080);
-    BOOST_CHECK_EQUAL(first.role(), schema::client);
+    // Test red peer
+    endpoint red_loc = red.location();
+    BOOST_CHECK(red_loc.address().is_v6());
+    BOOST_CHECK_EQUAL(red_loc.address().to_string(), "::1");
+    BOOST_CHECK_EQUAL(red_loc.port(), 8080);
+    BOOST_CHECK_EQUAL(red.role(), schema::client);
     
     // Test second peer
-    endpoint second_loc = second.location();
-    BOOST_CHECK(second_loc.address().is_v6());
-    BOOST_CHECK_EQUAL(second_loc.address().to_string(), "2001:db8::1");
-    BOOST_CHECK_EQUAL(second_loc.port(), 1234);
-    BOOST_CHECK_EQUAL(second.role(), schema::server);
+    endpoint blue_loc = blue.location();
+    BOOST_CHECK(blue_loc.address().is_v6());
+    BOOST_CHECK_EQUAL(blue_loc.address().to_string(), "2001:db8::1");
+    BOOST_CHECK_EQUAL(blue_loc.port(), 1234);
+    BOOST_CHECK_EQUAL(blue.role(), schema::server);
 }
 
 BOOST_AUTO_TEST_CASE(couple_mixed_ipv4_ipv6_should_throw)
@@ -152,7 +152,7 @@ BOOST_AUTO_TEST_CASE(couple_mixed_ipv4_ipv6_should_throw)
     couple c(data);
     
     // First peer (IPv4) should work fine
-    peer ipv4_peer = c.one();
+    peer ipv4_peer = c.red();
     endpoint ipv4_loc = ipv4_peer.location();
     
     BOOST_CHECK(ipv4_loc.address().is_v4());
@@ -161,7 +161,7 @@ BOOST_AUTO_TEST_CASE(couple_mixed_ipv4_ipv6_should_throw)
     BOOST_CHECK_EQUAL(ipv4_peer.role(), schema::client);
     
     // Second peer (IPv6) should throw exception due to mixed address types
-    BOOST_CHECK_THROW(c.two(), std::runtime_error);
+    BOOST_CHECK_THROW(c.blue(), std::runtime_error);
 }
 
 BOOST_AUTO_TEST_CASE(couple_mixed_ipv6_ipv4_should_throw)
@@ -180,7 +180,7 @@ BOOST_AUTO_TEST_CASE(couple_mixed_ipv6_ipv4_should_throw)
     couple c(data);
     
     // First peer (IPv6) should work fine
-    peer ipv6_peer = c.one();
+    peer ipv6_peer = c.red();
     endpoint ipv6_loc = ipv6_peer.location();
     
     BOOST_CHECK(ipv6_loc.address().is_v6());
@@ -189,7 +189,7 @@ BOOST_AUTO_TEST_CASE(couple_mixed_ipv6_ipv4_should_throw)
     BOOST_CHECK_EQUAL(ipv6_peer.role(), schema::client);
     
     // Second peer (IPv4) should throw exception due to mixed address types
-    BOOST_CHECK_THROW(c.two(), std::runtime_error);
+    BOOST_CHECK_THROW(c.blue(), std::runtime_error);
 }
 
 BOOST_AUTO_TEST_CASE(couple_both_ipv6_localhost)
@@ -213,20 +213,20 @@ BOOST_AUTO_TEST_CASE(couple_both_ipv6_localhost)
     
     BOOST_CHECK_EQUAL(c.size(), 40); // 2 * (1 + 16 + 2 + 1)
     
-    peer p1 = c.one();
-    peer p2 = c.two();
+    peer red = c.red();
+    peer blue = c.blue();
     
-    BOOST_CHECK_EQUAL(p1.size(), 20);
-    BOOST_CHECK_EQUAL(p2.size(), 20);
+    BOOST_CHECK_EQUAL(red.size(), 20);
+    BOOST_CHECK_EQUAL(blue.size(), 20);
     
-    endpoint loc1 = p1.location();
-    endpoint loc2 = p2.location();
+    endpoint loc1 = red.location();
+    endpoint loc2 = blue.location();
     
     BOOST_CHECK_EQUAL(loc1.address().to_string(), "::1");
     BOOST_CHECK_EQUAL(loc1.port(), 80);
-    BOOST_CHECK_EQUAL(p1.role(), schema::client);
+    BOOST_CHECK_EQUAL(red.role(), schema::client);
     
     BOOST_CHECK_EQUAL(loc2.address().to_string(), "::1");
     BOOST_CHECK_EQUAL(loc2.port(), 81);
-    BOOST_CHECK_EQUAL(p2.role(), schema::server);
+    BOOST_CHECK_EQUAL(blue.role(), schema::server);
 }

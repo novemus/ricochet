@@ -14,8 +14,7 @@ BOOST_AUTO_TEST_CASE(query_default_constructor)
 BOOST_AUTO_TEST_CASE(query_buffer_constructor)
 {
     std::vector<uint8_t> data = {0x00, 0x01, 0x00, 0x00, 0x02, 0x00}; // provide query with TCP protocol
-    buffer buf(data);
-    query q(buf);
+    query q(data);
     
     BOOST_CHECK_EQUAL(q.size(), data.size());
     BOOST_CHECK(q.data() != nullptr);
@@ -32,8 +31,8 @@ BOOST_AUTO_TEST_CASE(query_connect_type)
     boost::asio::ip::address addr1 = boost::asio::ip::make_address("192.168.1.1");
     boost::asio::ip::address addr2 = boost::asio::ip::make_address("192.168.1.2");
     
-    query q = query::make_connect_query(addr1, 8080, schema::client, 
-                                       addr2, 8081, schema::server);
+    query q = query::make_connect_query(peer(addr1, 8080, schema::client), 
+                                        peer(addr2, 8081, schema::server));
     BOOST_CHECK_EQUAL(static_cast<uint8_t>(q.type()), 1); // connect kind
 }
 
@@ -51,8 +50,8 @@ BOOST_AUTO_TEST_CASE(query_connect_payload)
     boost::asio::ip::address addr1 = boost::asio::ip::make_address("127.0.0.1");
     boost::asio::ip::address addr2 = boost::asio::ip::make_address("127.0.0.1");
     
-    query q = query::make_connect_query(addr1, 1234, schema::client, 
-                                       addr2, 5678, schema::server);
+    query q = query::make_connect_query(peer(addr1, 1234, schema::client), 
+                                        peer(addr2, 5678, schema::server));
     query::value payload = q.payload();
     
     BOOST_CHECK(std::holds_alternative<couple>(payload));

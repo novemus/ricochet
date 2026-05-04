@@ -4,8 +4,26 @@
 
 namespace ricochet {
 
+endpoint::endpoint(const boost::asio::ip::address& addr, uint16_t port)
+{
+    if (addr.is_v4())
+    {
+        m_data.push_back(4); // IPv4 type
+        auto v4_bytes = addr.to_v4().to_bytes();
+        m_data.insert(m_data.end(), v4_bytes.begin(), v4_bytes.end());
+    }
+    else if (addr.is_v6())
+    {
+        m_data.push_back(6); // IPv6 type
+        auto v6_bytes = addr.to_v6().to_bytes();
+        m_data.insert(m_data.end(), v6_bytes.begin(), v6_bytes.end());
+    }
+    
+    m_data.push_back(static_cast<uint8_t>((port >> 8) & 0xFF));
+    m_data.push_back(static_cast<uint8_t>(port & 0xFF));
+}
 
-boost::asio::ip::address endpoint::address()
+boost::asio::ip::address endpoint::address() const
 {
     if (m_data.empty())
         throw malformed_query("Empty endpoint data");
@@ -40,7 +58,7 @@ boost::asio::ip::address endpoint::address()
     throw malformed_query("Invalid address type");
 }
 
-uint16_t endpoint::port()
+uint16_t endpoint::port() const
 {
     if (m_data.empty())
         throw malformed_query("Empty endpoint data");
@@ -50,10 +68,10 @@ uint16_t endpoint::port()
     if (m_data.size() < pos + 2)
         throw malformed_query("Invalid port data");
 
-    return ntohs(*reinterpret_cast<uint16_t*>(&m_data[pos]));
+    return ntohs(*reinterpret_cast<const uint16_t*>(&m_data[pos]));
 }
 
-endpoint peer::location()
+endpoint peer::location() const
 {
     if (m_data.empty())
         throw malformed_query("Empty peer data");
@@ -67,7 +85,27 @@ endpoint peer::location()
     return endpoint { buffer };
 }
 
-schema peer::role()
+peer::peer(const boost::asio::ip::address& addr, uint16_t port, schema role)
+{
+    if (addr.is_v4())
+    {
+        m_data.push_back(4);
+        auto v4_bytes = addr.to_v4().to_bytes();
+        m_data.insert(m_data.end(), v4_bytes.begin(), v4_bytes.end());
+    }
+    else if (addr.is_v6())
+    {
+        m_data.push_back(6);
+        auto v6_bytes = addr.to_v6().to_bytes();
+        m_data.insert(m_data.end(), v6_bytes.begin(), v6_bytes.end());
+    }
+    
+    m_data.push_back(static_cast<uint8_t>((port >> 8) & 0xFF));
+    m_data.push_back(static_cast<uint8_t>(port & 0xFF));
+    m_data.push_back(static_cast<uint8_t>(role));
+}
+
+schema peer::role() const
 {
     if (m_data.empty())
         throw malformed_query("Empty peer data");
@@ -80,7 +118,45 @@ schema peer::role()
     return static_cast<schema>(m_data[len]);
 }
 
-peer couple::one()
+couple::couple(const boost::asio::ip::address& red_addr, uint16_t red_port, schema red_role,
+               const boost::asio::ip::address& blue_addr, uint16_t blue_port, schema blue_role)
+{
+    if (red_addr.is_v4())
+    {
+        m_data.push_back(4);
+        auto v4_bytes = red_addr.to_v4().to_bytes();
+        m_data.insert(m_data.end(), v4_bytes.begin(), v4_bytes.end());
+    }
+    else if (red_addr.is_v6())
+    {
+        m_data.push_back(6);
+        auto v6_bytes = red_addr.to_v6().to_bytes();
+        m_data.insert(m_data.end(), v6_bytes.begin(), v6_bytes.end());
+    }
+    
+    m_data.push_back(static_cast<uint8_t>((red_port >> 8) & 0xFF));
+    m_data.push_back(static_cast<uint8_t>(red_port & 0xFF));
+    m_data.push_back(static_cast<uint8_t>(red_role));
+
+    if (blue_addr.is_v4())
+    {
+        m_data.push_back(4);
+        auto v4_bytes = blue_addr.to_v4().to_bytes();
+        m_data.insert(m_data.end(), v4_bytes.begin(), v4_bytes.end());
+    }
+    else if (blue_addr.is_v6())
+    {
+        m_data.push_back(6);
+        auto v6_bytes = blue_addr.to_v6().to_bytes();
+        m_data.insert(m_data.end(), v6_bytes.begin(), v6_bytes.end());
+    }
+    
+    m_data.push_back(static_cast<uint8_t>((blue_port >> 8) & 0xFF));
+    m_data.push_back(static_cast<uint8_t>(blue_port & 0xFF));
+    m_data.push_back(static_cast<uint8_t>(blue_role));
+}
+
+peer couple::red() const
 {
     if (m_data.empty())
         throw malformed_query("Empty couple data");
@@ -94,7 +170,7 @@ peer couple::one()
     return peer { buffer };
 }
 
-peer couple::two()
+peer couple::blue() const
 {
     if (m_data.empty())
         throw malformed_query("Empty couple data");
@@ -140,7 +216,7 @@ query::value query::payload() const
     throw malformed_query("Invalid query kind");
 }
 
-query::query(const buffer& data)
+query::query(const std::vector<uint8_t>& data)
     : buffer(data)
 {
 }
@@ -167,56 +243,18 @@ query query::make_provide_query(protocol proto)
     return result;
 }
 
-query query::make_connect_query(const boost::asio::ip::address& addr_one, uint16_t port_one, schema role_one,
-                                const boost::asio::ip::address& addr_two, uint16_t port_two, schema role_two)
+query query::make_connect_query(const peer& red, const peer& blue)
 {
     query result;
     
-    // Add tag
     result.m_data.push_back(static_cast<uint8_t>(kind::connect));
-    
-    // Reserve space for length field (4 bytes)
     result.m_data.insert(result.m_data.end(), {0, 0, 0, 0});
+    result.m_data.insert(result.m_data.end(), red.data(), red.data() + red.size());
+    result.m_data.insert(result.m_data.end(), blue.data(), blue.data() + blue.size());
     
-    // Add payload data
-    if (addr_one.is_v4())
-    {
-        result.m_data.push_back(4); // IPv4 type
-        auto v4_bytes = addr_one.to_v4().to_bytes();
-        result.m_data.insert(result.m_data.end(), v4_bytes.begin(), v4_bytes.end());
-    }
-    else if (addr_one.is_v6())
-    {
-        result.m_data.push_back(6); // IPv6 type
-        auto v6_bytes = addr_one.to_v6().to_bytes();
-        result.m_data.insert(result.m_data.end(), v6_bytes.begin(), v6_bytes.end());
-    }
-    
-    result.m_data.push_back(static_cast<uint8_t>((port_one >> 8) & 0xFF));
-    result.m_data.push_back(static_cast<uint8_t>(port_one & 0xFF));
-    result.m_data.push_back(static_cast<uint8_t>(role_one));
-
-    if (addr_two.is_v4())
-    {
-        result.m_data.push_back(4); // IPv4 type
-        auto v4_bytes = addr_two.to_v4().to_bytes();
-        result.m_data.insert(result.m_data.end(), v4_bytes.begin(), v4_bytes.end());
-    }
-    else if (addr_two.is_v6())
-    {
-        result.m_data.push_back(6); // IPv6 type
-        auto v6_bytes = addr_two.to_v6().to_bytes();
-        result.m_data.insert(result.m_data.end(), v6_bytes.begin(), v6_bytes.end());
-    }
-    
-    result.m_data.push_back(static_cast<uint8_t>((port_two >> 8) & 0xFF));
-    result.m_data.push_back(static_cast<uint8_t>(port_two & 0xFF));
-    result.m_data.push_back(static_cast<uint8_t>(role_two));
-    
-    // Fill length field using reinterpret_cast for direct memory access
     uint32_t* ptr = reinterpret_cast<uint32_t*>(&result.m_data[1]);
     *ptr = htonl(static_cast<uint32_t>(result.m_data.size() - 5));
-    
+
     return result;
 }
 
@@ -259,7 +297,7 @@ reply::value reply::payload() const
     throw malformed_query("Invalid reply kind");
 }
 
-reply::reply(const buffer& data)
+reply::reply(const std::vector<uint8_t>& data)
     : buffer(data)
 {
 }
@@ -272,37 +310,17 @@ uint32_t reply::length() const
     return ntohl(*reinterpret_cast<const uint32_t*>(m_data.data() + 1));
 }
 
-reply reply::make_binding_reply(const boost::asio::ip::address& addr, uint16_t port)
+reply reply::make_binding_reply(const endpoint& relay)
 {
     reply result;
     
-    // Add tag
     result.m_data.push_back(static_cast<uint8_t>(kind::binding));
-    
-    // Reserve space for length field (4 bytes)
     result.m_data.insert(result.m_data.end(), {0, 0, 0, 0});
+    result.m_data.insert(result.m_data.end(), relay.data(), relay.data() + relay.size());
 
-    // Add payload data
-    if (addr.is_v4())
-    {
-        result.m_data.push_back(4); // IPv4 type
-        auto v4_bytes = addr.to_v4().to_bytes();
-        result.m_data.insert(result.m_data.end(), v4_bytes.begin(), v4_bytes.end());
-    }
-    else if (addr.is_v6())
-    {
-        result.m_data.push_back(6); // IPv6 type
-        auto v6_bytes = addr.to_v6().to_bytes();
-        result.m_data.insert(result.m_data.end(), v6_bytes.begin(), v6_bytes.end());
-    }
-    
-    result.m_data.push_back(static_cast<uint8_t>((port >> 8) & 0xFF));
-    result.m_data.push_back(static_cast<uint8_t>(port & 0xFF));
-    
-    // Fill length field using reinterpret_cast for direct memory access
     uint32_t* ptr = reinterpret_cast<uint32_t*>(&result.m_data[1]);
     *ptr = htonl(static_cast<uint32_t>(result.m_data.size() - 5));
-    
+
     return result;
 }
 
@@ -310,16 +328,10 @@ reply reply::make_mistake_reply(failure err)
 {
     reply result;
     
-    // Add tag
     result.m_data.push_back(static_cast<uint8_t>(kind::mistake));
-    
-    // Reserve space for length field (4 bytes)
     result.m_data.insert(result.m_data.end(), {0, 0, 0, 0});
-    
-    // Add payload
     result.m_data.push_back(static_cast<uint8_t>(err));
-    
-    // Fill length field using reinterpret_cast for direct memory access
+
     uint32_t* ptr = reinterpret_cast<uint32_t*>(&result.m_data[1]);
     *ptr = htonl(static_cast<uint32_t>(result.m_data.size() - 5));
     
@@ -330,13 +342,9 @@ reply reply::make_confirm_reply()
 {
     reply result;
 
-    // Add tag
     result.m_data.push_back(static_cast<uint8_t>(kind::confirm));
-    
-    // Reserve space for length field (4 bytes)
     result.m_data.insert(result.m_data.end(), {0, 0, 0, 0});
-    
-    // Fill length field using reinterpret_cast for direct memory access
+
     uint32_t* ptr = reinterpret_cast<uint32_t*>(&result.m_data[1]);
     *ptr = htonl(static_cast<uint32_t>(result.m_data.size() - 5));
     

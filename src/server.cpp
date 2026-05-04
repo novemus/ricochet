@@ -89,7 +89,7 @@ void server::do_accept()
 
                         std::string hash = m_repo.get_certificate_hash(cert.get());
 
-                        auto relay = std::make_shared<session>(std::move(*socket), m_config.idle_timeout);
+                        auto relay = std::make_shared<session>(m_io, std::move(*socket), m_config.idle_timeout);
                         if (!check_limits(hash))
                         {
                             relay->error(ricochet::failure::limit_reached);
@@ -131,7 +131,7 @@ void server::do_accept()
     });
 }
 
-bool server::check_limits(const std::string& client_hash)
+bool server::check_limits(const std::string& client)
 {
     size_t client_sessions = 0;
     size_t total_sessions = 0;
@@ -141,7 +141,7 @@ bool server::check_limits(const std::string& client_hash)
     {
         for (auto it = sessions.begin(); it != sessions.end();)
         {
-            if (client_hash == hash)
+            if (client == hash)
                 ++client_sessions;
 
             ++total_sessions;

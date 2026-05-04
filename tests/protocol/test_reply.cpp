@@ -14,8 +14,7 @@ BOOST_AUTO_TEST_CASE(reply_default_constructor)
 BOOST_AUTO_TEST_CASE(reply_buffer_constructor)
 {
     std::vector<uint8_t> data = {0x00, 0x01, 0x00, 0x00, 0x06, 0xC0, 0xA8, 0x01, 0x01, 0x1F, 0x90}; // binding reply
-    buffer buf(data);
-    reply r(buf);
+    reply r(data);
     
     BOOST_CHECK_EQUAL(r.size(), data.size());
     BOOST_CHECK(r.data() != nullptr);
@@ -24,7 +23,7 @@ BOOST_AUTO_TEST_CASE(reply_buffer_constructor)
 BOOST_AUTO_TEST_CASE(reply_binding_type)
 {
     boost::asio::ip::address addr = boost::asio::ip::make_address("192.168.1.100");
-    reply r = reply::make_binding_reply(addr, 8080);
+    reply r = reply::make_binding_reply(endpoint(addr, 8080));
     BOOST_CHECK_EQUAL(static_cast<uint8_t>(r.type()), 0); // binding kind
 }
 
@@ -43,7 +42,7 @@ BOOST_AUTO_TEST_CASE(reply_mistake_type)
 BOOST_AUTO_TEST_CASE(reply_binding_payload)
 {
     boost::asio::ip::address addr = boost::asio::ip::make_address("127.0.0.1");
-    reply r = reply::make_binding_reply(addr, 1234);
+    reply r = reply::make_binding_reply(endpoint(addr, 1234));
     reply::value payload = r.payload();
     
     BOOST_CHECK(std::holds_alternative<endpoint>(payload));
@@ -70,7 +69,7 @@ BOOST_AUTO_TEST_CASE(reply_mistake_payload)
 BOOST_AUTO_TEST_CASE(reply_length)
 {
     boost::asio::ip::address addr = boost::asio::ip::make_address("10.0.0.1");
-    reply r = reply::make_binding_reply(addr, 80);
+    reply r = reply::make_binding_reply(endpoint(addr, 80));
     uint32_t length = r.length();
     BOOST_CHECK(length > 0);
 }
@@ -113,8 +112,8 @@ BOOST_AUTO_TEST_CASE(reply_make_binding_different_addresses)
     boost::asio::ip::address ipv4 = boost::asio::ip::make_address("192.168.1.1");
     boost::asio::ip::address ipv6 = boost::asio::ip::make_address("::1");
     
-    reply r_ipv4 = reply::make_binding_reply(ipv4, 8080);
-    reply r_ipv6 = reply::make_binding_reply(ipv6, 8080);
+    reply r_ipv4 = reply::make_binding_reply(endpoint(ipv4, 8080));
+    reply r_ipv6 = reply::make_binding_reply(endpoint(ipv6, 8080));
     
     BOOST_CHECK_EQUAL(static_cast<uint8_t>(r_ipv4.type()), 0);
     BOOST_CHECK_EQUAL(static_cast<uint8_t>(r_ipv6.type()), 0);

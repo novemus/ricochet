@@ -85,7 +85,7 @@ struct buffer
 {
     buffer() = default;
     explicit buffer(std::size_t size) : m_data(size) {}
-    buffer(const std::vector<uint8_t>& data) : m_data(data) {}
+    explicit buffer(const std::vector<uint8_t>& data) : m_data(data) {}
 
     void resize(std::size_t size) { m_data.resize(size); }
     std::size_t size() const { return m_data.size(); }
@@ -99,26 +99,30 @@ protected:
 
 struct endpoint : public buffer
 {
-    boost::asio::ip::address address();
-    uint16_t port();
+    boost::asio::ip::address address() const;
+    uint16_t port() const;
 
-    endpoint(const std::vector<uint8_t>& data) : buffer(data) {}
+    endpoint(const boost::asio::ip::address& addr, uint16_t port);
+    explicit endpoint(const std::vector<uint8_t>& data) : buffer(data) {}
 };
 
 struct peer : public buffer
 {
-    endpoint location();
-    schema role();
-
-    peer(const std::vector<uint8_t>& data) : buffer(data) {}
+    endpoint location() const;
+    schema role() const;
+    
+    peer(const boost::asio::ip::address& addr, uint16_t port, schema role);
+    explicit peer(const std::vector<uint8_t>& data) : buffer(data) {}
 };
 
 struct couple : public buffer
 {
-    peer one();
-    peer two();
+    peer red() const;
+    peer blue() const;
 
-    couple(const std::vector<uint8_t>& data) : buffer(data) {}
+    couple(const boost::asio::ip::address& red_addr, uint16_t red_port, schema red_role,
+           const boost::asio::ip::address& blue_addr, uint16_t blue_port, schema blue_role);
+    explicit couple(const std::vector<uint8_t>& data) : buffer(data) {}
 };
 
 struct query : public buffer
@@ -136,11 +140,10 @@ struct query : public buffer
     value payload() const;
 
     query() = default;
-    explicit query(const buffer& data);
+    explicit query(const std::vector<uint8_t>& data);
 
     static query make_provide_query(protocol proto);
-    static query make_connect_query(const boost::asio::ip::address& addr_one, uint16_t port_one, schema role_one,
-                                    const boost::asio::ip::address& addr_two, uint16_t port_two, schema role_two);
+    static query make_connect_query(const peer& red, const peer& blue);
 };
 
 struct reply : public buffer
@@ -159,9 +162,9 @@ struct reply : public buffer
     value payload() const;
 
     reply() = default;
-    explicit reply(const buffer& data);
+    explicit reply(const std::vector<uint8_t>& data);
 
-    static reply make_binding_reply(const boost::asio::ip::address& addr, uint16_t port);
+    static reply make_binding_reply(const endpoint& relay);
     static reply make_mistake_reply(failure err);
     static reply make_confirm_reply();
 };

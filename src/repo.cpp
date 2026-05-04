@@ -1,7 +1,8 @@
-#include "repo.h"
 #include <fstream>
 #include <sstream>
 #include <iomanip>
+#include <iostream>
+#include <repo.h>
 
 namespace ricochet {
 
@@ -15,24 +16,15 @@ bool repository::is_certificate_allowed(X509* cert) const
 {
     if (!cert)
         return false;
-    
-    // Check if cache needs update
+
     update_cache_incremental();
-    
-    // Get certificate hash and check against cache
+
     std::string hash = get_certificate_hash_from_x509(cert);
-    
+
     std::lock_guard<std::mutex> lock(m_mutex);
-    auto it = m_cache.find(hash);
-    
-    if (it != m_cache.end())
-    {
-        // Compare with cached certificate
-        int result = X509_cmp(cert, it->second.get());
-        return result == 0; // Accept only if certificates are identical
-    }
-    
-    return false; // Certificate not found in cache
+    const auto& hashs = m_cache.get<by_hash>();
+    auto it = hashs.find(hash);
+    return it != hashs.end() && X509_cmp(cert, it->cert.get()) == 0;
 }
 
 
@@ -40,10 +32,10 @@ std::string repository::get_certificate_hash(X509* cert)
 {
     if (!cert)
         return "";
-    
+
     unsigned char* raw = nullptr;
     int length = i2d_X509(cert, &raw);
-    
+
     if (length < 0)
     {
         if (raw)
@@ -61,7 +53,7 @@ std::string repository::get_certificate_hash(X509* cert)
     {
         ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]);
     }
-    
+
     return ss.str();
 }
 
@@ -70,16 +62,16 @@ std::pair<std::string, X509Ptr> repository::load_certificate_file(const std::fil
     std::ifstream file(path, std::ios::binary);
     if (!file)
         throw std::runtime_error("Cannot read certificate file: " + path.string());
-    
+
     std::string cert_content((std::istreambuf_iterator<char>(file)),
                            std::istreambuf_iterator<char>());
-    
+
     BIOPtr bio(BIO_new_mem_buf(cert_content.c_str(), cert_content.length()));
     X509Ptr cert(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
-    
+
     if (!cert)
         throw std::runtime_error("Failed to parse certificate: " + path.string());
-    
+
     std::string hash = get_certificate_hash_from_x509(cert.get());
     return std::make_pair(hash, std::move(cert));
 }
@@ -87,83 +79,40 @@ std::pair<std::string, X509Ptr> repository::load_certificate_file(const std::fil
 void repository::update_cache_incremental() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
-    
-    // Collect current certificate files
-    auto files = collect_current_certificate_files();
-    
-    // Remove certificates for deleted files
-    for (const auto& [path, time] : m_times)
-    {
-        if (files.find(path) == files.end())
-        {
-            // File was deleted, find and remove its certificate
-            for (const auto& [hash, cert] : m_cache)
-            {
-                // Find the certificate hash that corresponds to this file
-                // We need to reload the file to check, but since it's deleted, we remove based on file path
-                // This is a limitation - we'll remove all certificates that don't have corresponding files
-                bool valid = false;
-                for (const auto& file : files)
-                {
-                    // Check if this hash corresponds to any current file
-                    try
-                    {
-                        auto [current_hash, current_cert] = load_certificate_file(file);
-                        if (current_hash == hash)
-                        {
-                            valid = true;
-                            break;
-                        }
-                    }
-                    catch (...)
-                    {
-                        continue;
-                    }
-                }
-                
-                if (!valid)
-                    m_cache.erase(hash);
-            }
-        }
-    }
 
-    // Clear modification times for deleted files
-    for (auto it = m_times.begin(); it != m_times.end();)
+    auto files = collect_current_certificate_files();
+
+    auto& path_index = m_cache.get<by_path>();
+    for (auto it = path_index.begin(); it != path_index.end();)
     {
-        if (files.find(it->first) == files.end())
+        if (files.find(it->path) == files.end())
         {
-            it = m_times.erase(it);
+            it = path_index.erase(it);
         }
         else
         {
             ++it;
         }
     }
-    
-    // Update/add certificates for current files
+
     for (const auto& file : files)
     {
         auto time = std::filesystem::last_write_time(file);
-        std::string key = file.string();
-        
-        auto it = m_times.find(key);
-        if (it == m_times.end() || it->second != time)
+
+        auto& paths = m_cache.get<by_path>();
+        auto pi = paths.find(file);
+
+        if (pi == paths.end() || pi->time != time)
         {
-            // New or modified file
             try
             {
+                paths.erase(pi);
                 auto [hash, cert] = load_certificate_file(file);
-                
-                // Remove old certificate with same hash if exists
-                m_cache.erase(hash);
-                
-                // Add new certificate
-                m_cache[hash] = std::move(cert);
-                m_times[key] = time;
+                m_cache.emplace(certificate { hash, file, std::move(cert), time });
             }
             catch (const std::exception& e)
             {
-                // Log error but continue with other files
+                std::cerr << "Error loading certificate " << file << ": " << e.what() << std::endl;
                 continue;
             }
         }
@@ -172,55 +121,56 @@ void repository::update_cache_incremental() const
 
 std::string repository::get_certificate_hash_from_x509(X509* cert) const
 {
-    unsigned char* cert_data = nullptr;
-    int cert_length = i2d_X509(cert, &cert_data);
-    
-    if (cert_length < 0)
+    unsigned char* data = nullptr;
+    int length = i2d_X509(cert, &data);
+
+    if (length < 0)
     {
-        if (cert_data) ::free(cert_data);
+        if (data)
+            ::free(data);
         return "";
     }
-    
-    // Use smart pointer for automatic cleanup
-    std::unique_ptr<unsigned char, decltype(&::free)> cert_data_ptr(cert_data, &::free);
-    
+
+    std::unique_ptr<unsigned char, decltype(&::free)> ptr(data, &::free);
+
     unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256(cert_data_ptr.get(), cert_length, hash);
-    
+    SHA256(ptr.get(), length, hash);
+
     std::stringstream ss;
     for (int i = 0; i < SHA256_DIGEST_LENGTH; ++i)
     {
         ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]);
     }
-    
+
     return ss.str();
 }
 
 std::set<std::filesystem::path> repository::collect_current_certificate_files() const
 {
     std::set<std::filesystem::path> files;
-    
+
     for (const auto& owner : std::filesystem::directory_iterator(m_repo))
     {
         if (!owner.is_directory())
             continue;
-        
+
         for (const auto& host : std::filesystem::directory_iterator(owner))
         {
             if (!host.is_directory())
                 continue;
-            
+
             std::filesystem::path cert_file_path = host.path() / "cert.crt";
             if (!std::filesystem::exists(cert_file_path))
             {
                 cert_file_path = host.path() / "cert.pem";
-                if (!std::filesystem::exists(cert_file_path)) continue;
+                if (!std::filesystem::exists(cert_file_path))
+                    continue;
             }
-            
+
             files.insert(std::filesystem::absolute(cert_file_path));
         }
     }
-    
+
     return files;
 }
 

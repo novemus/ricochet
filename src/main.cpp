@@ -1,10 +1,12 @@
-#include <boost/asio/ip/address.hpp>
-#include <iostream>
-#include <string>
 #include <boost/asio.hpp>
+#include <iostream>
+#include <filesystem>
+#include <vector>
+#include <thread>
 #include <boost/program_options.hpp>
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/variables_map.hpp>
+#include <ricochet.h>
 #include <server.h>
 #include <repo.h>
 
@@ -14,7 +16,7 @@ int main(int argc, char* argv[])
 {
     try
     {
-        po::options_description desc("ricochet relay server options");
+        po::options_description desc("Ricochet relay server options");
         desc.add_options()
             ("help", "show help message")
             ("host", po::value<std::string>()->default_value("0.0.0.0"), "listen address")
@@ -71,25 +73,57 @@ int main(int argc, char* argv[])
         boost::asio::io_context io;
         ricochet::server server(io, config);
 
+        unsigned int thread_count = std::max(4u, std::thread::hardware_concurrency());
+
         if (vm.count("verbose"))
         {
             std::cout << "Starting Ricochet relay server on " 
                       << config.server_endpoint.address() << ":" << config.server_endpoint.port() << "\n";
             std::cout << "SSL certificate: " << config.server_cert << "\n";
             std::cout << "SSL private key: " << config.server_key << "\n";
-            std::cout << "Certificate repository: " << config.client_repo << "\n";
+            std::cout << "Client repository: " << config.client_repo << "\n";
             std::cout << "Idle timeout: " << config.idle_timeout.total_seconds() << " seconds\n";
             std::cout << "Max sessions per client: " << config.client_relay_limit << "\n";
             std::cout << "Max total sessions: " << config.total_relay_limit << "\n";
+            std::cout << "Using " << thread_count << " worker threads\n";
         }
 
         server.accept();
-        io.run();
 
+        std::vector<std::thread> workers;
+        for (unsigned int i = 1; i < thread_count; ++i)
+        {
+            workers.emplace_back([&io]()
+            {
+                try
+                {
+                    io.run();
+                }
+                catch (const std::exception& e)
+                {
+                    std::cerr << "Worker thread error: " << e.what() << std::endl;
+                }
+            });
+        }
+
+        try
+        {
+            io.run();
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << "Main thread error: " << e.what() << std::endl;
+        }
+
+        for (auto& worker : workers)
+        {
+            if (worker.joinable())
+                worker.join();
+        }
     }
     catch (const std::exception& e)
     {
-        std::cerr << "Error: " << e.what() << "\n";
+        std::cerr << "Error: " << e.what() << std::endl;
         return 1;
     }
 

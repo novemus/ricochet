@@ -7,59 +7,79 @@
 
 namespace ricochet {
 
+using cleanup_function = std::function<void()>;
+
 struct relay
 {
     virtual ~relay() {}
     virtual protocol get_protocol() const = 0;
-    virtual boost::asio::ip::address get_address() const = 0;
-    virtual uint16_t get_port() const = 0;
-    virtual void set_cleaner(std::function<void()> clean) = 0;
-    virtual void start(const endpoint& one_loc, schema one_role, const endpoint& two_loc, schema two_role) = 0;
+    virtual endpoint get_endpoint() const = 0;
+    virtual void start(const peer& red, const peer& blue) = 0;
     virtual void close() = 0;
 };
 
 class tcp_relay : public relay, public std::enable_shared_from_this<tcp_relay>
 {
+    using socket_ptr = std::shared_ptr<boost::asio::ip::tcp::socket>;
+
     boost::asio::io_context& m_io;
+    boost::asio::io_context::strand m_strand;
     boost::asio::ip::tcp::acceptor m_server;
-    boost::asio::ip::tcp::socket m_one;
-    boost::asio::ip::tcp::socket m_two;
     boost::asio::deadline_timer m_timer;
     boost::posix_time::seconds m_idle;
-    std::function<void()> m_clean;
+    cleanup_function m_clean;
+    socket_ptr m_near;
+    socket_ptr m_away;
+    std::chrono::steady_clock::time_point m_timestamp;
 
 public:
 
-    tcp_relay(boost::asio::io_context& io, bool v6, boost::posix_time::seconds idle);
+    tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds idle, cleanup_function clean);
     ~tcp_relay() override;
     protocol get_protocol() const override;
-    boost::asio::ip::address get_address() const override;
-    uint16_t get_port() const override;
-    void set_cleaner(std::function<void()> clean) override;
-    void start(const endpoint& one_loc, schema one_role, const endpoint& two_loc, schema two_role) override;
+    endpoint get_endpoint() const override;
+    void start(const peer& red, const peer& blue) override;
     void close() override;
+
+private:
+
+    void connect_peer(const endpoint& which);
+    void accept_peer(const endpoint& which);
+    void transmit_data(socket_ptr from, socket_ptr to);
+    void start_relay();
+    void break_relay();
+    void watch_activity();
 };
 
 class udp_relay : public relay, public std::enable_shared_from_this<udp_relay>
 {
+    using socket_ptr = std::shared_ptr<boost::asio::ip::udp::socket>;
+
     boost::asio::io_context& m_io;
+    boost::asio::io_context::strand m_strand;
     boost::asio::ip::udp::socket m_socket;
-    boost::asio::ip::udp::endpoint m_one;
-    boost::asio::ip::udp::endpoint m_two;
+    boost::asio::ip::udp::endpoint m_near;
+    boost::asio::ip::udp::endpoint m_away;
     boost::asio::deadline_timer m_timer;
     boost::posix_time::seconds m_idle;
-    std::function<void()> m_clean;
+    cleanup_function m_clean;
+    std::chrono::steady_clock::time_point m_timestamp;
 
 public:
 
-    udp_relay(boost::asio::io_context& io, bool v6, boost::posix_time::seconds idle);
+    udp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds idle, cleanup_function clean);
     ~udp_relay() override;
     protocol get_protocol() const override;
-    boost::asio::ip::address get_address() const override;
-    uint16_t get_port() const override;
-    void set_cleaner(std::function<void()> finalizer) override;
-    void start(const endpoint& one_loc, schema one_role, const endpoint& two_loc, schema two_role) override;
+    endpoint get_endpoint() const override;
+    void start(const peer& red, const peer& blue) override;
     void close() override;
+
+private:
+
+    bool can_transmit() const;
+    void read_socket();
+    void break_relay();
+    void watch_activity();
 };
 
 }

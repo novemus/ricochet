@@ -8,6 +8,7 @@
 #include <memory>
 #include <mutex>
 #include <repo.h>
+#include <session.h>
 
 namespace ricochet {
 
@@ -39,7 +40,7 @@ class server : public std::enable_shared_from_this<server>
     boost::asio::io_context& m_io;
     boost::asio::ssl::context m_ssl;
     boost::asio::ip::tcp::acceptor m_server;
-    std::map<std::string, std::set<std::shared_ptr<class session>>> m_relays;
+    std::map<std::string, std::set<std::shared_ptr<session>>> m_relays;
     std::mutex m_mutex;
 
 public:
@@ -53,7 +54,7 @@ public:
 private:
 
     void do_accept();
-    bool check_limits(const std::string& client_hash);
+    bool check_limits(const std::string& client);
 };
 
 } // namespace ricochet

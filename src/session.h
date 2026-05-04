@@ -11,34 +11,38 @@ namespace ricochet {
 
 class session : public std::enable_shared_from_this<session>
 {
+    boost::asio::io_context& m_io;
     boost::asio::ssl::stream<boost::asio::ip::tcp::socket> m_socket;
+    boost::asio::io_context::strand m_strand;
     boost::asio::deadline_timer m_timer;
     boost::posix_time::seconds m_idle;
     std::shared_ptr<ricochet::relay> m_relay;
     ricochet::query m_query;
-    std::function<void()> m_clean;
+    cleanup_function m_clean;
 
 public:
 
-    session(boost::asio::ssl::stream<boost::asio::ip::tcp::socket> socket,
+    session(boost::asio::io_context& io,
+            boost::asio::ssl::stream<boost::asio::ip::tcp::socket> socket,
             boost::posix_time::seconds idle);
 
     ~session();
     void start();
     void close();
-    void error(ricochet::failure error);
-    void set_cleaner(std::function<void()> clean);
+    void error(ricochet::failure err);
+    void set_cleaner(cleanup_function clean);
 
 private:
 
+    void do_close();
     void do_read();
     void do_read_length();
-    void do_read_payload(uint32_t length);
-    void handle_message();
+    void do_read_payload(uint32_t len);
     void do_write(const ricochet::reply& msg);
-    void handle_provide_query(const ricochet::query& msg);
-    void handle_connect_query(const ricochet::query& msg);
-    void send_error_reply(ricochet::failure error);
+    void handle_query();
+    void handle_provide_query();
+    void handle_connect_query();
+    void send_error_reply(ricochet::failure err);
     void start_timer();
 };
 
