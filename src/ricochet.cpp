@@ -1,5 +1,4 @@
-#include "ricochet.h"
-#include <stdexcept>
+#include <ricochet.h>
 #include <cstring>
 #include <arpa/inet.h>
 
@@ -9,7 +8,7 @@ namespace ricochet {
 boost::asio::ip::address endpoint::address()
 {
     if (m_data.empty())
-        throw std::runtime_error("Empty endpoint data");
+        throw malformed_query("Empty endpoint data");
 
     size_t pos = 0;
     uint8_t type = m_data[pos++];
@@ -17,7 +16,7 @@ boost::asio::ip::address endpoint::address()
     if (type == 4) // IPv4
     {
         if (m_data.size() < 7)
-            throw std::runtime_error("Invalid IPv4 endpoint data");
+            throw malformed_query("Invalid IPv4 endpoint data");
 
         std::array<uint8_t, 4> bytes;
         for (int i = 0; i < 4; ++i)
@@ -29,7 +28,7 @@ boost::asio::ip::address endpoint::address()
     else if (type == 6) // IPv6
     {
         if (m_data.size() < 19)
-            throw std::runtime_error("Invalid IPv6 endpoint data");
+            throw malformed_query("Invalid IPv6 endpoint data");
 
         std::array<uint8_t, 16> bytes;
         for (int i = 0; i < 16; ++i)
@@ -38,32 +37,31 @@ boost::asio::ip::address endpoint::address()
         }
         return boost::asio::ip::address_v6(bytes);
     }
-    throw std::runtime_error("Invalid address type");
+    throw malformed_query("Invalid address type");
 }
 
 uint16_t endpoint::port()
 {
     if (m_data.empty())
-        throw std::runtime_error("Empty endpoint data");
+        throw malformed_query("Empty endpoint data");
+    
+    size_t pos = (m_data[0] == 4) ? 5 : 17;
+    
+    if (m_data.size() < pos + 2)
+        throw malformed_query("Invalid port data");
 
-    size_t pos = (m_data[0] == 4) ? 4 : 16;
-
-    if (m_data.size() < pos + 3)
-        throw std::runtime_error("Invalid port data");
-
-    uint16_t port = static_cast<uint16_t>(m_data[pos] << 8) | m_data[pos + 1];
-    return port;
+    return ntohs(*reinterpret_cast<uint16_t*>(&m_data[pos]));
 }
 
 endpoint peer::location()
 {
     if (m_data.empty())
-        throw std::runtime_error("Empty peer data");
+        throw malformed_query("Empty peer data");
 
     size_t len = (m_data[0] == 4) ? 7 : 19;
 
-    if (m_data.size() < len + 2)
-        throw std::runtime_error("Invalid endpoint data");
+    if (m_data.size() < len + 1)
+        throw malformed_query("Invalid endpoint data");
 
     std::vector<uint8_t> buffer(m_data.begin(), m_data.begin() + len);
     return endpoint { buffer };
@@ -72,12 +70,12 @@ endpoint peer::location()
 schema peer::role()
 {
     if (m_data.empty())
-        throw std::runtime_error("Empty peer data");
+        throw malformed_query("Empty peer data");
 
     size_t len = (m_data[0] == 4) ? 7 : 19;
 
     if (m_data.size() < len + 1)
-        throw std::runtime_error("Invalid role data");
+        throw malformed_query("Invalid role data");
 
     return static_cast<schema>(m_data[len]);
 }
@@ -85,12 +83,12 @@ schema peer::role()
 peer couple::one()
 {
     if (m_data.empty())
-        throw std::runtime_error("Empty couple data");
+        throw malformed_query("Empty couple data");
 
     size_t len = m_data[0] == 4 ? 8 : 20;
 
     if (m_data.size() < len)
-        throw std::runtime_error("Invalid first peer data");
+        throw malformed_query("Invalid first peer data");
 
     std::vector<uint8_t> buffer(m_data.begin(), m_data.begin() + len);
     return peer { buffer };
@@ -99,12 +97,12 @@ peer couple::one()
 peer couple::two()
 {
     if (m_data.empty())
-        throw std::runtime_error("Empty couple data");
+        throw malformed_query("Empty couple data");
 
     size_t len = m_data[0] == 4 ? 8 : 20;
 
-    if (m_data.size() < len * 2)
-        throw std::runtime_error("Invalid second peer data");
+    if (m_data.size() < len * 2 || m_data[0] != m_data[len])
+        throw malformed_query("Invalid second peer data");
 
     std::vector<uint8_t> buffer(m_data.begin() + len, m_data.begin() + len * 2);
     return peer { buffer };
@@ -113,7 +111,7 @@ peer couple::two()
 query::kind query::type() const
 {
     if (m_data.empty())
-        throw std::runtime_error("Invalid query data");
+        throw malformed_query("Invalid query data");
 
     return static_cast<kind>(m_data[0]); // Tag is first byte
 }
@@ -123,7 +121,7 @@ query::value query::payload() const
     kind which = type();
 
     if (m_data.size() < 6) // tag (1) + length (4) + payload (1) minimum
-         std::runtime_error("Invalid protocol payload");
+         throw malformed_query("Invalid protocol payload");
 
     if (which == kind::provide)
     {
@@ -133,13 +131,13 @@ query::value query::payload() const
     {
         size_t len = m_data[5] == 4 ? 16 : 40; // Check address type after tag + length
         if (m_data.size() < 1 + 4 + len) // tag + length + payload
-            throw std::runtime_error("Invalid couple payload");
+            throw malformed_query("Invalid couple payload");
 
         std::vector<uint8_t> buffer(m_data.begin() + 5, m_data.begin() + 5 + len); // Skip tag + length
         return couple { buffer };
     }
 
-    throw std::runtime_error("Invalid query kind");
+    throw malformed_query("Invalid query kind");
 }
 
 query::query(const buffer& data)
@@ -225,7 +223,7 @@ query query::make_connect_query(const boost::asio::ip::address& addr_one, uint16
 reply::kind reply::type() const
 {
     if (m_data.empty())
-        throw std::runtime_error("Invalid reply data");
+        throw malformed_query("Invalid reply data");
 
     return static_cast<kind>(m_data[0]); // Tag is first byte
 }
@@ -236,12 +234,12 @@ reply::value reply::payload() const
     if (which == kind::binding)
     {
         if (m_data.size() < 6) // tag (1) + length (4) + address type (1) minimum
-            throw std::runtime_error("Invalid binding payload");
+            throw malformed_query("Invalid binding payload");
 
         size_t len = (m_data[5] == 4) ? 7 : 19; // Check address type after tag + length
 
         if (m_data.size() < 1 + 4 + len) // tag + length + payload
-            throw std::runtime_error("Invalid binding payload");
+            throw malformed_query("Invalid binding payload");
 
         std::vector<uint8_t> buffer(m_data.begin() + 5, m_data.begin() + 5 + len); // Skip tag + length
         return endpoint { buffer };
@@ -249,7 +247,7 @@ reply::value reply::payload() const
     else if (which == kind::mistake)
     {
         if (m_data.size() < 6) // tag (1) + length (4) + error code (1)
-            throw std::runtime_error("Invalid mistake payload");
+            throw malformed_query("Invalid mistake payload");
 
         return static_cast<failure>(m_data[5]); // Skip tag + length
     }
@@ -258,7 +256,7 @@ reply::value reply::payload() const
         return true;
     }
 
-    throw std::runtime_error("Invalid reply kind");
+    throw malformed_query("Invalid reply kind");
 }
 
 reply::reply(const buffer& data)

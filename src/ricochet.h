@@ -5,9 +5,24 @@
 #include <variant>
 #include <cstdint>
 #include <variant>
-#include <memory>
+#include <ostream>
+#include <stdexcept>
 
 namespace ricochet {
+
+class protocol_unavailable : public std::runtime_error
+{
+public:
+    explicit protocol_unavailable(const std::string& msg)
+        : std::runtime_error(msg) {}
+};
+
+class malformed_query : public std::runtime_error
+{
+public:
+    explicit malformed_query(const std::string& msg)
+        : std::runtime_error(msg) {}
+};
 
 enum class protocol : uint8_t
 {
@@ -27,9 +42,44 @@ enum class failure : uint8_t
 {
     server_error = 0,
     malformed_query = 1,
-    unavalable_proto = 2,
+    unavailable_proto = 2,
     limit_reached = 3
 };
+
+// Stream operators for enum types
+inline std::ostream& operator<<(std::ostream& os, const protocol& proto)
+{
+    switch (proto)
+    {
+        case protocol::udp4: return os << "udp4";
+        case protocol::tcp4: return os << "tcp4";
+        case protocol::udp6: return os << "udp6";
+        case protocol::tcp6: return os << "tcp6";
+        default: return os << "unknown";
+    }
+}
+
+inline std::ostream& operator<<(std::ostream& os, const schema& sch)
+{
+    switch (sch)
+    {
+        case schema::client: return os << "client";
+        case schema::server: return os << "server";
+        default: return os << "unknown";
+    }
+}
+
+inline std::ostream& operator<<(std::ostream& os, const failure& fail)
+{
+    switch (fail)
+    {
+        case failure::server_error: return os << "server_error";
+        case failure::malformed_query: return os << "malformed_query";
+        case failure::unavailable_proto: return os << "unavailable_proto";
+        case failure::limit_reached: return os << "limit_reached";
+        default: return os << "unknown";
+    }
+}
 
 struct buffer
 {
@@ -82,8 +132,8 @@ struct query : public buffer
     using value = std::variant<protocol, couple>;
 
     kind type() const;
-    value payload() const;
     uint32_t length() const;
+    value payload() const;
 
     query() = default;
     explicit query(const buffer& data);
@@ -105,8 +155,8 @@ struct reply : public buffer
     using value = std::variant<endpoint, failure, bool>;
 
     kind type() const;
-    value payload() const;
     uint32_t length() const;
+    value payload() const;
 
     reply() = default;
     explicit reply(const buffer& data);

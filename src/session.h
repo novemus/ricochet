@@ -1,9 +1,11 @@
+#pragma once
+
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/bind/bind.hpp>
 #include <memory>
-#include "ricochet.h"
-#include "relay.h"
+#include <ricochet.h>
+#include <relay.h>
 
 namespace ricochet {
 
@@ -11,9 +13,10 @@ class session : public std::enable_shared_from_this<session>
 {
     boost::asio::ssl::stream<boost::asio::ip::tcp::socket> m_socket;
     boost::asio::deadline_timer m_timer;
-    std::weak_ptr<relay> m_relay;
     boost::posix_time::seconds m_idle;
+    std::shared_ptr<ricochet::relay> m_relay;
     ricochet::query m_query;
+    std::function<void()> m_clean;
 
 public:
 
@@ -24,6 +27,7 @@ public:
     void start();
     void close();
     void error(ricochet::failure error);
+    void set_cleaner(std::function<void()> clean);
 
 private:
 
@@ -36,8 +40,6 @@ private:
     void handle_connect_query(const ricochet::query& msg);
     void send_error_reply(ricochet::failure error);
     void start_timer();
-    void handle_timeout();
-    std::shared_ptr<ricochet::relay> create_relay(ricochet::protocol proto);
 };
 
 }

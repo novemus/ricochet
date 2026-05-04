@@ -29,7 +29,7 @@ class server : public std::enable_shared_from_this<server>
     boost::asio::io_context& m_io;
     boost::asio::ssl::context m_ssl;
     boost::asio::ip::tcp::acceptor m_server;
-    std::map<std::string, std::set<std::weak_ptr<session>>> m_relays;
+    std::map<std::string, std::set<std::shared_ptr<session>>> m_relays;
     std::mutex m_mutex;
 
 public:
@@ -67,12 +67,9 @@ public:
         std::lock_guard<std::mutex> lock(m_mutex);
         for (auto& [hash, sessions] : m_relays)
         {
-            for (auto& weak : sessions)
+            for (auto& session : sessions)
             {
-                if (auto ptr = weak.lock())
-                {
-                    ptr->close();
-                }
+                session->close();
             }
         }
         m_relays.clear();
@@ -89,18 +86,11 @@ private:
         {
             for (auto it = sessions.begin(); it != sessions.end();)
             {
-                if (it->expired())
-                {
-                    it = sessions.erase(it);
-                }
-                else
-                {
-                    if (client == hash)
-                        ++client_sessions;
+                if (client == hash)
+                    ++client_sessions;
 
-                    ++total_sessions;
-                    ++it;
-                }
+                ++total_sessions;
+                ++it;
             }
         }
         
@@ -140,37 +130,38 @@ protected:
         {
             if (!ec)
             {
-                // Perform SSL handshake - certificate verification happens in callback
                 socket->async_handshake(boost::asio::ssl::stream_base::server, [this, socket](const boost::system::error_code& ec)
                 {
                     if (!ec)
                     {
                         try
                         {
-                            // Get certificate hash for session key
                             X509Ptr cert(SSL_get_peer_certificate(socket->native_handle()));
                             if (!cert)
                                 throw std::runtime_error("No peer certificate");
 
                             std::string hash = m_repo.get_certificate_hash(cert.get());
 
-                            // Create session with certificate hash as key
                             auto relay = std::make_shared<session>(std::move(*socket), m_config.idle_timeout);
-
-                            // Check limits after session creation
                             if (!check_limits(hash))
                             {
-                                // Session will send error and close itself
                                 relay->error(ricochet::failure::limit_reached);
                                 return;
                             }
                             else
                             {
-                                // Add to relay collection if within limits
+                                std::lock_guard<std::mutex> lock(m_mutex);
+                                relay->set_cleaner([this, weak = weak_from_this(), hash, relay]() 
                                 {
-                                    std::lock_guard<std::mutex> lock(m_mutex);
-                                    m_relays[hash].insert(relay);
-                                }
+                                    if (auto self = weak.lock())
+                                    {
+                                        std::lock_guard<std::mutex> lock(m_mutex);
+                                        m_relays[hash].erase(relay);
+                                        if (m_relays[hash].empty())
+                                            m_relays.erase(hash);
+                                    }
+                                });
+                                m_relays[hash].insert(relay);
                             }
 
                             relay->start();
