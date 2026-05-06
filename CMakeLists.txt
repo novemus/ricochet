@@ -40,6 +40,7 @@ enable_testing()
 add_executable(ricochet_tests
     src/ricochet.cpp
     src/repo.cpp
+    src/relay.cpp
     tests/main.cpp
     tests/protocol/enums.cpp
     tests/protocol/buffer.cpp
@@ -49,6 +50,7 @@ add_executable(ricochet_tests
     tests/protocol/query.cpp
     tests/protocol/reply.cpp
     tests/repo.cpp
+    tests/relay.cpp
 )
 
 target_link_libraries(ricochet_tests 

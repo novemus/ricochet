@@ -60,12 +60,12 @@ ricochet::X509Ptr load_cert_from_string(const std::string& cert_content)
     return cert;
 }
 
-struct RepositoryTestFixture
+struct repository_test_fixture
 {
     fs::path temp_dir;
     fs::path repo_dir;
 
-    RepositoryTestFixture()
+    repository_test_fixture()
     {
         // Use current directory for tests
         temp_dir = fs::current_path() / "test_repo_final";
@@ -79,7 +79,7 @@ struct RepositoryTestFixture
         fs::create_directories(repo_dir);
     }
 
-    ~RepositoryTestFixture()
+    ~repository_test_fixture()
     {
         if (fs::exists(temp_dir)) {
             fs::remove_all(temp_dir);
@@ -105,16 +105,16 @@ struct RepositoryTestFixture
     }
 };
 
-BOOST_FIXTURE_TEST_SUITE(repository_tests, RepositoryTestFixture)
+BOOST_FIXTURE_TEST_SUITE(repository_tests, repository_test_fixture)
 
-BOOST_AUTO_TEST_CASE(test_get_certificate_hash_null)
+BOOST_AUTO_TEST_CASE(get_certificate_hash_null)
 {
     // Test static function with null certificate
     std::string null_hash = ricochet::repository::get_certificate_hash(nullptr);
     BOOST_TEST(null_hash.empty());
 }
 
-BOOST_AUTO_TEST_CASE(test_get_certificate_hash_valid)
+BOOST_AUTO_TEST_CASE(get_certificate_hash_valid)
 {
     // Test with valid certificate
     std::string cert_content = get_valid_cert_content();
@@ -130,7 +130,7 @@ BOOST_AUTO_TEST_CASE(test_get_certificate_hash_valid)
     BOOST_TEST(hash == hash2);
 }
 
-BOOST_AUTO_TEST_CASE(test_empty_repository)
+BOOST_AUTO_TEST_CASE(empty_repository)
 {
     ricochet::repository repo(repo_dir);
 
@@ -142,7 +142,7 @@ BOOST_AUTO_TEST_CASE(test_empty_repository)
     BOOST_TEST(fs::is_empty(repo_dir));
 }
 
-BOOST_AUTO_TEST_CASE(test_repository_with_correct_structure)
+BOOST_AUTO_TEST_CASE(repository_with_correct_structure)
 {
     // Create correct OWNER/HOST/cert.crt structure
     std::string cert1_content = get_valid_cert_content();
@@ -163,7 +163,7 @@ BOOST_AUTO_TEST_CASE(test_repository_with_correct_structure)
     BOOST_TEST(!repo.is_certificate_allowed(nullptr));
 }
 
-BOOST_AUTO_TEST_CASE(test_is_certificate_allowed_with_valid_cert)
+BOOST_AUTO_TEST_CASE(is_certificate_allowed_with_valid_cert)
 {
     // Create certificate in repository
     std::string cert_content = get_valid_cert_content();
@@ -179,7 +179,7 @@ BOOST_AUTO_TEST_CASE(test_is_certificate_allowed_with_valid_cert)
     BOOST_TEST(repo.is_certificate_allowed(cert.get()));
 }
 
-BOOST_AUTO_TEST_CASE(test_is_certificate_allowed_with_different_cert)
+BOOST_AUTO_TEST_CASE(is_certificate_allowed_with_different_cert)
 {
     // Create one certificate in repository
     std::string repo_cert_content = get_valid_cert_content();
@@ -201,7 +201,7 @@ BOOST_AUTO_TEST_CASE(test_is_certificate_allowed_with_different_cert)
     BOOST_TEST(!repo.is_certificate_allowed(different_cert.get()));
 }
 
-BOOST_AUTO_TEST_CASE(test_is_certificate_allowed_with_null_cert)
+BOOST_AUTO_TEST_CASE(is_certificate_allowed_with_null_cert)
 {
     create_owner_host_structure("owner", "host.com", get_valid_cert_content());
     
@@ -211,7 +211,7 @@ BOOST_AUTO_TEST_CASE(test_is_certificate_allowed_with_null_cert)
     BOOST_TEST(!repo.is_certificate_allowed(nullptr));
 }
 
-BOOST_AUTO_TEST_CASE(test_certificate_hash_consistency)
+BOOST_AUTO_TEST_CASE(certificate_hash_consistency)
 {
     // Check that identical certificates produce identical hashes
     std::string cert_content = get_valid_cert_content();
@@ -227,7 +227,7 @@ BOOST_AUTO_TEST_CASE(test_certificate_hash_consistency)
     BOOST_TEST(hash1 == hash2);
 }
 
-BOOST_AUTO_TEST_CASE(test_cert_pem_fallback)
+BOOST_AUTO_TEST_CASE(cert_pem_fallback)
 {
     // Create certificate with name cert.pem instead of cert.crt
     std::string cert_content = get_valid_cert_content();

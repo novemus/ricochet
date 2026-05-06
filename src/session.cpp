@@ -75,7 +75,10 @@ void session::do_close()
     }
 
     if (m_clean)
+    {
         m_clean();
+        m_clean = nullptr;
+    }
 }
 
 void session::do_read()
@@ -258,6 +261,7 @@ void session::handle_provide_query()
             throw malformed_query("Unsupported protocol");
     }
 
+    m_clean = nullptr;
     do_write(ricochet::reply::make_binding_reply(m_relay->get_endpoint()));
 }
 

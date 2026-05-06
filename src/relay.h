@@ -9,6 +9,8 @@ namespace ricochet {
 
 bool is_ip4_available(boost::asio::io_context& io);
 bool is_ip6_available(boost::asio::io_context& io);
+boost::asio::ip::address get_outgoing_address(boost::asio::io_context& io, bool ip4);
+boost::asio::ip::address get_outgoing_address(boost::asio::io_context& io, const boost::asio::ip::address& address);
 
 using cleanup_function = std::function<void()>;
 
@@ -23,16 +25,15 @@ struct relay
 
 class tcp_relay : public relay, public std::enable_shared_from_this<tcp_relay>
 {
-    using socket_ptr = std::shared_ptr<boost::asio::ip::tcp::socket>;
-
     boost::asio::io_context& m_io;
     boost::asio::io_context::strand m_strand;
     boost::asio::ip::tcp::acceptor m_server;
+    boost::asio::ip::tcp::socket m_near;
+    boost::asio::ip::tcp::socket m_away;
     boost::asio::deadline_timer m_timer;
     boost::posix_time::seconds m_idle;
     cleanup_function m_clean;
-    socket_ptr m_near;
-    socket_ptr m_away;
+
     std::chrono::steady_clock::time_point m_timestamp;
 
 public:
@@ -48,7 +49,7 @@ private:
 
     void connect_peer(const endpoint& which);
     void accept_peer(const endpoint& which);
-    void transmit_data(socket_ptr from, socket_ptr to);
+    void transmit_data(boost::asio::ip::tcp::socket& from, boost::asio::ip::tcp::socket& to);
     void start_relay();
     void break_relay();
     void watch_activity();

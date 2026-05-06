@@ -1,4 +1,7 @@
 #include <boost/asio/ip/tcp.hpp>
+#ifdef __APPLE__
+#include <sys/socket.h>
+#endif
 #include <memory>
 #include <chrono>
 #include <iostream>
@@ -85,6 +88,8 @@ tcp_relay::tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_t
     : m_io(io)
     , m_strand(io)
     , m_server(io)
+    , m_near(io)
+    , m_away(io)
     , m_timer(io)
     , m_idle(idle)
     , m_clean(clean)
@@ -94,6 +99,10 @@ tcp_relay::tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_t
 
     m_server.open(protocol);
     m_server.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
+#ifdef __APPLE__
+    int optval = 1;
+    ::setsockopt(m_server.native_handle(), SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+#endif
     m_server.bind(boost::asio::ip::tcp::endpoint(protocol, 0));
     m_server.listen();
 }
@@ -150,7 +159,7 @@ void tcp_relay::close()
 
 void tcp_relay::start_relay()
 {
-    if (m_near && m_away)
+    if (m_near.is_open() && m_away.is_open())
     {
         boost::system::error_code ec;
         m_server.close(ec);
@@ -189,8 +198,18 @@ void tcp_relay::watch_activity()
 
 void tcp_relay::connect_peer(const endpoint& which)
 {
+    auto endpoint = m_server.local_endpoint();
+
     auto peer = std::make_shared<boost::asio::ip::tcp::socket>(m_io);
-    peer->async_connect(boost::asio::ip::tcp::endpoint(which.address(), which.port()), 
+    peer->open(endpoint.protocol());
+    peer->set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
+#ifdef __APPLE__
+    int optval = 1;
+    ::setsockopt(peer->native_handle(), SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+#endif
+    peer->bind(endpoint);
+
+    peer->async_connect(boost::asio::ip::tcp::endpoint(which.address(), which.port()),
         m_strand.wrap([this, weak = weak_from_this(), peer](const boost::system::error_code& ec)
         {
             auto self = weak.lock();
@@ -199,10 +218,10 @@ void tcp_relay::connect_peer(const endpoint& which)
 
             if (!ec)
             {
-                if (m_near)
-                    m_away = peer;
+                if (m_near.is_open())
+                    m_away = std::move(*peer);
                 else
-                    m_near = peer;
+                    m_near = std::move(*peer);
 
                 start_relay();
             }
@@ -224,37 +243,39 @@ void tcp_relay::accept_peer(const endpoint& which)
 
         if (!ec)
         {
-            auto location = peer->remote_endpoint();
+            auto endpoint = peer->remote_endpoint();
 
-            bool address_matches = which.address().is_unspecified() || location.address() == which.address();
-            bool port_matches = which.port() == 0 || location.port() == which.port();
+            bool address_matches = which.address().is_unspecified() || endpoint.address() == which.address();
+            bool port_matches = which.port() == 0 || endpoint.port() == which.port();
 
             if (address_matches && port_matches)
             {
-                if (m_near)
-                    m_away = peer;
+                if (m_near.is_open())
+                    m_away = std::move(*peer);
                 else
-                    m_near = peer;
+                    m_near = std::move(*peer);
 
                 start_relay();
             }
             else
             {
+                boost::system::error_code ec;
+                peer->shutdown(boost::asio::socket_base::shutdown_type::shutdown_both, ec);
                 accept_peer(which);
             }
         }
         else
         {
-            accept_peer(which);
+            break_relay();
         }
     }));
 }
 
-void tcp_relay::transmit_data(socket_ptr from, socket_ptr to)
+void tcp_relay::transmit_data(boost::asio::ip::tcp::socket& from, boost::asio::ip::tcp::socket& to)
 {
     auto buffer = std::make_shared<std::array<uint8_t, 8192>>();
-    from->async_read_some(boost::asio::buffer(buffer.get(), buffer->size()), 
-        m_strand.wrap([this, weak = weak_from_this(), buffer, from, to](const boost::system::error_code& ec, std::size_t size)
+    from.async_read_some(boost::asio::buffer(buffer.get(), buffer->size()), 
+        m_strand.wrap([this, weak = weak_from_this(), buffer, &from, &to](const boost::system::error_code& ec, std::size_t size)
         {
             auto self = weak.lock();
             if (!self)
@@ -264,13 +285,13 @@ void tcp_relay::transmit_data(socket_ptr from, socket_ptr to)
             {
                 m_timestamp = std::chrono::steady_clock::now();
                 
-                boost::asio::async_write(*to, boost::asio::buffer(buffer.get(), size),
-                    [this, weak, from, to](const boost::system::error_code& ec, std::size_t)
+                boost::asio::async_write(to, boost::asio::buffer(buffer.get(), size),
+                    [this, weak, &from, &to](const boost::system::error_code& ec, std::size_t)
                     {
                         auto self = weak.lock();
                         if (!self)
                             return;
-                        
+
                         if (!ec)
                         {
                             m_timestamp = std::chrono::steady_clock::now();
@@ -294,16 +315,16 @@ void tcp_relay::break_relay()
     boost::system::error_code ec;
     m_server.close(ec);
 
-    if (m_near)
-        m_near->close(ec);
-
-    if (m_away)
-        m_away->close(ec);
+    m_near.close(ec);
+    m_away.close(ec);
 
     m_timer.cancel(ec);
 
     if (m_clean)
+    {
         m_clean();
+        m_clean = nullptr;
+    }
 }
 
 udp_relay::udp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds idle, cleanup_function clean)
@@ -320,9 +341,7 @@ udp_relay::udp_relay(boost::asio::io_context& io, protocol proto, boost::posix_t
 
 udp_relay::~udp_relay()
 {
-    close();
-    if (m_clean)
-        m_clean();
+    break_relay();
 }
 
 protocol udp_relay::get_protocol() const
@@ -404,10 +423,10 @@ bool udp_relay::can_transmit() const
 void udp_relay::read_socket()
 {
     auto buffer = std::make_shared<std::array<uint8_t, 8192>>();
-    auto from = std::shared_ptr<boost::asio::ip::udp::endpoint>();
+    auto peer = std::make_shared<boost::asio::ip::udp::endpoint>();
 
-    m_socket.async_receive_from(boost::asio::buffer(*buffer), *from,
-        m_strand.wrap([this, weak = weak_from_this(), buffer, from](const boost::system::error_code& ec, std::size_t size)
+    m_socket.async_receive_from(boost::asio::buffer(*buffer), *peer,
+        m_strand.wrap([this, weak = weak_from_this(), buffer, peer](const boost::system::error_code& ec, std::size_t size)
         {
             auto self = weak.lock();
             if (!self)
@@ -417,27 +436,27 @@ void udp_relay::read_socket()
             {
                 if (!can_transmit())
                 {
-                    bool near_address_matches = m_near.address().is_unspecified() || from->address() == m_near.address();
-                    bool near_port_matches = m_near.port() == 0 || from->port() == m_near.port();
-                    bool away_address_matches = m_away.address().is_unspecified() || from->address() == m_away.address();
-                    bool away_port_matches = m_away.port() == 0 || from->port() == m_away.port();
+                    bool near_address_matches = m_near.address().is_unspecified() || peer->address() == m_near.address();
+                    bool near_port_matches = m_near.port() == 0 || peer->port() == m_near.port();
+                    bool away_address_matches = m_away.address().is_unspecified() || peer->address() == m_away.address();
+                    bool away_port_matches = m_away.port() == 0 || peer->port() == m_away.port();
 
                     if (near_address_matches && near_port_matches)
                     {
                         m_timestamp = std::chrono::steady_clock::now();
-                        m_near = *from;
+                        m_near = *peer;
                     }
                     else if (away_address_matches && away_port_matches)
                     {
                         m_timestamp = std::chrono::steady_clock::now();
-                        m_away = *from;
+                        m_away = *peer;
                     }
                 }
 
-                if (can_transmit())
+                if (can_transmit() && (*peer == m_near || *peer == m_away))
                 {
                     m_timestamp = std::chrono::steady_clock::now();
-                    m_socket.async_send_to(boost::asio::buffer(buffer->data(), size), *from == m_near ? m_away : m_near, 
+                    m_socket.async_send_to(boost::asio::buffer(buffer->data(), size), *peer == m_near ? m_away : m_near, 
                         m_strand.wrap([this, weak](const boost::system::error_code& ec, std::size_t)
                     {
                         auto self = weak.lock();
@@ -465,7 +484,10 @@ void udp_relay::break_relay()
     m_timer.cancel(ec);
 
     if (m_clean)
+    {
         m_clean();
+        m_clean = nullptr;
+    }
 }
 
 }
