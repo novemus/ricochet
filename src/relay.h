@@ -7,6 +7,9 @@
 
 namespace ricochet {
 
+bool is_ip4_available(boost::asio::io_context& io);
+bool is_ip6_available(boost::asio::io_context& io);
+
 using cleanup_function = std::function<void()>;
 
 struct relay

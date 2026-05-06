@@ -1,6 +1,6 @@
 #include <boost/test/unit_test.hpp>
-#include <ricochet.h>
 #include <vector>
+#include <ricochet.h>
 
 using namespace ricochet;
 

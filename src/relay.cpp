@@ -2,37 +2,83 @@
 #include <memory>
 #include <chrono>
 #include <iostream>
+#include <cstdlib>
 #include <ricochet.h>
 #include <relay.h>
 
 namespace ricochet {
 
-boost::asio::ip::address get_outgoing_address(boost::asio::io_context& io, boost::asio::ip::address address)
+boost::asio::ip::address get_outgoing_address(boost::asio::io_context& io, bool ip4)
 {
-    if (!address.is_unspecified())
-        return address;
-
-    try 
+    try
     {
-        boost::asio::ip::udp::socket socket(io, address.is_v4() ? boost::asio::ip::udp::v4() : boost::asio::ip::udp::v6());
+        boost::asio::ip::udp::socket socket(io, ip4 ? boost::asio::ip::udp::v4() : boost::asio::ip::udp::v6());
         socket.set_option(boost::asio::socket_base::reuse_address(true));
-        socket.bind(boost::asio::ip::udp::endpoint(address, 0));
+        socket.bind(boost::asio::ip::udp::endpoint(ip4 ? boost::asio::ip::udp::v4() : boost::asio::ip::udp::v6(), 0));
 
-        auto remote = boost::asio::ip::udp::endpoint(
-            address.is_v4() ? boost::asio::ip::make_address("8.8.8.8") : boost::asio::ip::make_address("2001:4860:4860::8888"),
-            53);
+        const char* remote_endpoint_env = std::getenv(ip4 ? "RICOCHET_OUTGOING_TEST_IPV4" : "RICOCHET_OUTGOING_TEST_IPV6");
+        std::string remote_endpoint_str = remote_endpoint_env ? remote_endpoint_env : (ip4 ? "8.8.8.8:53" : "[2001:4860:4860::8888]:53");
+
+        boost::asio::ip::udp::endpoint remote;
+
+        try
+        {
+            size_t colon_pos = remote_endpoint_str.find_last_of(':');
+            if (colon_pos == std::string::npos)
+                throw std::runtime_error("No port specified in endpoint");
+
+            std::string remote_addr = remote_endpoint_str.substr(0, colon_pos);
+            std::string port_str = remote_endpoint_str.substr(colon_pos + 1);
+
+            if (remote_addr.front() == '[' && remote_addr.back() == ']')
+                remote_addr = remote_addr.substr(1, remote_addr.length() - 2);
+
+            uint16_t remote_port = static_cast<uint16_t>(std::stoi(port_str));
+
+            remote = boost::asio::ip::udp::endpoint(boost::asio::ip::make_address(remote_addr), remote_port);
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << "Warning: " << e.what() << std::endl;
+            remote = boost::asio::ip::udp::endpoint(boost::asio::ip::make_address(ip4 ? "8.8.8.8" : "2001:4860:4860::8888"), 53);
+        }
 
         socket.connect(remote);
         auto local = socket.local_endpoint();
 
         return local.address();
-    } 
-    catch (const boost::system::system_error& ex) 
+    }
+    catch (const boost::system::system_error& ex)
     {
         std::cerr << "Error: " << ex.what() << std::endl;
     }
 
     throw protocol_unavailable("Failed to determine outgoing address");
+}
+
+bool is_ip4_available(boost::asio::io_context& io)
+{
+    try
+    {
+        return get_outgoing_address(io, true).is_v4();
+    }
+    catch (const protocol_unavailable&) {}
+    return false;
+}
+
+bool is_ip6_available(boost::asio::io_context& io)
+{
+    try
+    {
+        return get_outgoing_address(io, false).is_v6();
+    }
+    catch (const protocol_unavailable&) {}
+    return false;
+}
+
+boost::asio::ip::address get_outgoing_address(boost::asio::io_context& io, const boost::asio::ip::address& address)
+{
+    return address.is_unspecified() ? get_outgoing_address(io, address.is_v4()) : address;
 }
 
 tcp_relay::tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds idle, cleanup_function clean)

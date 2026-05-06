@@ -65,8 +65,8 @@ void session::do_close()
 
     if (m_socket.lowest_layer().is_open())
     {
-        ec = m_socket.shutdown(ec);
-        ec = m_socket.lowest_layer().close(ec);
+        m_socket.shutdown(ec);
+        m_socket.lowest_layer().close(ec);
     }
 
     if (m_relay)
@@ -125,7 +125,7 @@ void session::do_read_length()
             {
                 if (size == 4)
                 {
-                    uint32_t length = ntohl(*reinterpret_cast<const uint32_t*>(m_query.data() + 1));
+                    uint32_t length = m_query.length();
                     if (length > m_query.size() - 5)
                     {
                         send_error_reply(ricochet::failure::malformed_query);
@@ -230,8 +230,8 @@ void session::do_write(const ricochet::reply& msg)
 
                 if (m_socket.lowest_layer().is_open())
                 {
-                    ec = m_socket.shutdown(ec);
-                    ec = m_socket.lowest_layer().close(ec);
+                    m_socket.shutdown(ec);
+                    m_socket.lowest_layer().close(ec);
                 }
             }
             else if (msg.type() == ricochet::reply::kind::mistake)
@@ -288,15 +288,15 @@ void session::handle_connect_query()
             return;
         }
         
-        bool peer_one_is_ipv6 = red.location().address().is_v6();
-        bool peer_two_is_ipv6 = blue.location().address().is_v6();
+        bool red_is_ipv6 = red.location().address().is_v6();
+        bool blue_is_ipv6 = blue.location().address().is_v6();
         
         bool protocol_matches = false;
         protocol relay_protocol = m_relay->get_protocol();
         if (relay_protocol == protocol::tcp4 || relay_protocol == protocol::udp4)
-            protocol_matches = !peer_one_is_ipv6 && !peer_two_is_ipv6;
+            protocol_matches = !red_is_ipv6 && !blue_is_ipv6;
         else if (relay_protocol == protocol::tcp6 || relay_protocol == protocol::udp6)
-            protocol_matches = peer_one_is_ipv6 && peer_two_is_ipv6;
+            protocol_matches = red_is_ipv6 && blue_is_ipv6;
         
         if (!protocol_matches)
         {

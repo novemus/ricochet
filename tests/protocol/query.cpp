@@ -1,7 +1,7 @@
 #include <boost/test/unit_test.hpp>
-#include <ricochet.h>
-#include <vector>
 #include <boost/asio.hpp>
+#include <vector>
+#include <ricochet.h>
 
 using namespace ricochet;
 

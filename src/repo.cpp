@@ -82,12 +82,12 @@ void repository::update_cache_incremental() const
 
     auto files = collect_current_certificate_files();
 
-    auto& path_index = m_cache.get<by_path>();
-    for (auto it = path_index.begin(); it != path_index.end();)
+    auto& paths = m_cache.get<by_path>();
+    for (auto it = paths.begin(); it != paths.end();)
     {
         if (files.find(it->path) == files.end())
         {
-            it = path_index.erase(it);
+            it = paths.erase(it);
         }
         else
         {
@@ -106,7 +106,9 @@ void repository::update_cache_incremental() const
         {
             try
             {
-                paths.erase(pi);
+                if (pi != paths.end())
+                    paths.erase(pi);
+
                 auto [hash, cert] = load_certificate_file(file);
                 m_cache.emplace(certificate { hash, file, std::move(cert), time });
             }

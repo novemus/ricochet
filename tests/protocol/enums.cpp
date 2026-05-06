@@ -1,6 +1,6 @@
 #include <boost/test/unit_test.hpp>
 #include <ricochet.h>
-#include <vector>
+
 using namespace ricochet;
 
 BOOST_AUTO_TEST_CASE(protocol_values)

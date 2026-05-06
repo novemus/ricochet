@@ -164,7 +164,7 @@ peer couple::red() const
     size_t len = m_data[0] == 4 ? 8 : 20;
 
     if (m_data.size() < len)
-        throw malformed_query("Invalid first peer data");
+        throw malformed_query("Invalid red peer data");
 
     std::vector<uint8_t> buffer(m_data.begin(), m_data.begin() + len);
     return peer { buffer };
@@ -178,7 +178,7 @@ peer couple::blue() const
     size_t len = m_data[0] == 4 ? 8 : 20;
 
     if (m_data.size() < len * 2 || m_data[0] != m_data[len])
-        throw malformed_query("Invalid second peer data");
+        throw malformed_query("Invalid blue peer data");
 
     std::vector<uint8_t> buffer(m_data.begin() + len, m_data.begin() + len * 2);
     return peer { buffer };

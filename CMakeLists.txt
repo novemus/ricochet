@@ -39,14 +39,16 @@ enable_testing()
 # Create test executable
 add_executable(ricochet_tests
     src/ricochet.cpp
+    src/repo.cpp
     tests/main.cpp
-    tests/protocol/test_enums.cpp
-    tests/protocol/test_buffer.cpp
-    tests/protocol/test_endpoint.cpp
-    tests/protocol/test_peer.cpp
-    tests/protocol/test_couple.cpp
-    tests/protocol/test_query.cpp
-    tests/protocol/test_reply.cpp
+    tests/protocol/enums.cpp
+    tests/protocol/buffer.cpp
+    tests/protocol/endpoint.cpp
+    tests/protocol/peer.cpp
+    tests/protocol/couple.cpp
+    tests/protocol/query.cpp
+    tests/protocol/reply.cpp
+    tests/repo.cpp
 )
 
 target_link_libraries(ricochet_tests 

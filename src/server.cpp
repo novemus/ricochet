@@ -57,7 +57,7 @@ void server::accept()
 void server::stop()
 {
     boost::system::error_code ec;
-    ec = m_server.close(ec);
+    m_server.close(ec);
 
     std::lock_guard<std::mutex> lock(m_mutex);
     for (auto& [hash, sessions] : m_relays)
