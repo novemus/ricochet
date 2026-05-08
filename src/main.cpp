@@ -6,9 +6,7 @@
 #include <filesystem>
 #include <vector>
 #include <thread>
-#include <ricochet.h>
-#include <server.h>
-#include <repo.h>
+#include "server.h"
 
 namespace po = boost::program_options;
 
@@ -23,6 +21,7 @@ int main(int argc, char* argv[])
             ("port", po::value<uint16_t>()->default_value(4433), "listen port")
             ("cert", po::value<std::filesystem::path>()->default_value("server.crt"), "SSL certificate file")
             ("key", po::value<std::filesystem::path>()->default_value("server.key"), "SSL private key file")
+            ("ca", po::value<std::filesystem::path>()->default_value("ca.crt"), "SSL CA certificate file")
             ("repo", po::value<std::filesystem::path>()->required(), "path to client certificate repository")
             ("idle", po::value<int>()->default_value(300), "idle session timeout in seconds")
             ("client-limit", po::value<size_t>()->default_value(10), "maximum sessions per client")

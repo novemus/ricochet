@@ -6,8 +6,8 @@
 #include <chrono>
 #include <iostream>
 #include <cstdlib>
-#include <ricochet.h>
-#include <relay.h>
+#include "proto.h"
+#include "relay.h"
 
 namespace ricochet {
 
@@ -56,7 +56,7 @@ boost::asio::ip::address get_outgoing_address(boost::asio::io_context& io, bool 
         std::cerr << "Error: " << ex.what() << std::endl;
     }
 
-    throw protocol_unavailable("Failed to determine outgoing address");
+    throw unavailable_proto("Failed to determine outgoing address");
 }
 
 bool is_ip4_available(boost::asio::io_context& io)
@@ -65,7 +65,7 @@ bool is_ip4_available(boost::asio::io_context& io)
     {
         return get_outgoing_address(io, true).is_v4();
     }
-    catch (const protocol_unavailable&) {}
+    catch (const unavailable_proto&) {}
     return false;
 }
 
@@ -75,7 +75,7 @@ bool is_ip6_available(boost::asio::io_context& io)
     {
         return get_outgoing_address(io, false).is_v6();
     }
-    catch (const protocol_unavailable&) {}
+    catch (const unavailable_proto&) {}
     return false;
 }
 

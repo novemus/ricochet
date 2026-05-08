@@ -1,0 +1,39 @@
+#pragma once
+
+#include <boost/asio.hpp>
+#include <boost/asio/executor_work_guard.hpp>
+#include <boost/test/unit_test.hpp>
+#include <memory>
+#include <filesystem>
+#include "server.h"
+#include "client.h"
+#include "agent.h"
+
+class integration_test_fixture
+{
+public:
+
+    integration_test_fixture();
+    ~integration_test_fixture();
+
+    std::shared_ptr<ricochet::server> create_server(bool using_ca = true, size_t client_limit = 2, size_t total_limit = 4);
+    std::shared_ptr<ricochet::client> create_client(bool using_ca = true);
+    std::shared_ptr<ricochet::agent> create_agent(bool using_ca = true);
+
+    boost::asio::io_context& get_io_context() { return m_io; }
+
+private:
+
+    boost::asio::io_context m_io;
+    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> m_work;
+    boost::asio::thread_pool m_pool;
+    boost::asio::ip::tcp::endpoint m_server;
+    std::filesystem::path m_repo;
+    std::filesystem::path m_ca_cert;
+    std::filesystem::path m_client_cert;
+    std::filesystem::path m_client_self_cert;
+    std::filesystem::path m_client_key;
+    std::filesystem::path m_server_cert;
+    std::filesystem::path m_server_self_cert;
+    std::filesystem::path m_server_key;
+};

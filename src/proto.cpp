@@ -1,6 +1,5 @@
-#include <ricochet.h>
 #include <cstring>
-#include <arpa/inet.h>
+#include "proto.h"
 
 namespace ricochet {
 
@@ -26,7 +25,7 @@ endpoint::endpoint(const boost::asio::ip::address& addr, uint16_t port)
 boost::asio::ip::address endpoint::address() const
 {
     if (m_data.empty())
-        throw malformed_query("Empty endpoint data");
+        throw malformed_message("Empty endpoint data");
 
     size_t pos = 0;
     uint8_t type = m_data[pos++];
@@ -34,7 +33,7 @@ boost::asio::ip::address endpoint::address() const
     if (type == 4) // IPv4
     {
         if (m_data.size() < 7)
-            throw malformed_query("Invalid IPv4 endpoint data");
+            throw malformed_message("Invalid IPv4 endpoint data");
 
         std::array<uint8_t, 4> bytes;
         for (int i = 0; i < 4; ++i)
@@ -46,7 +45,7 @@ boost::asio::ip::address endpoint::address() const
     else if (type == 6) // IPv6
     {
         if (m_data.size() < 19)
-            throw malformed_query("Invalid IPv6 endpoint data");
+            throw malformed_message("Invalid IPv6 endpoint data");
 
         std::array<uint8_t, 16> bytes;
         for (int i = 0; i < 16; ++i)
@@ -55,18 +54,18 @@ boost::asio::ip::address endpoint::address() const
         }
         return boost::asio::ip::address_v6(bytes);
     }
-    throw malformed_query("Invalid address type");
+    throw malformed_message("Invalid address type");
 }
 
 uint16_t endpoint::port() const
 {
     if (m_data.empty())
-        throw malformed_query("Empty endpoint data");
+        throw malformed_message("Empty endpoint data");
     
     size_t pos = (m_data[0] == 4) ? 5 : 17;
     
     if (m_data.size() < pos + 2)
-        throw malformed_query("Invalid port data");
+        throw malformed_message("Invalid port data");
 
     return ntohs(*reinterpret_cast<const uint16_t*>(&m_data[pos]));
 }
@@ -74,12 +73,12 @@ uint16_t endpoint::port() const
 endpoint peer::location() const
 {
     if (m_data.empty())
-        throw malformed_query("Empty peer data");
+        throw malformed_message("Empty peer data");
 
     size_t len = (m_data[0] == 4) ? 7 : 19;
 
     if (m_data.size() < len + 1)
-        throw malformed_query("Invalid endpoint data");
+        throw malformed_message("Invalid endpoint data");
 
     std::vector<uint8_t> buffer(m_data.begin(), m_data.begin() + len);
     return endpoint { buffer };
@@ -108,12 +107,12 @@ peer::peer(const boost::asio::ip::address& addr, uint16_t port, schema role)
 schema peer::role() const
 {
     if (m_data.empty())
-        throw malformed_query("Empty peer data");
+        throw malformed_message("Empty peer data");
 
     size_t len = (m_data[0] == 4) ? 7 : 19;
 
     if (m_data.size() < len + 1)
-        throw malformed_query("Invalid role data");
+        throw malformed_message("Invalid role data");
 
     return static_cast<schema>(m_data[len]);
 }
@@ -150,7 +149,7 @@ couple::couple(const boost::asio::ip::address& red_addr, uint16_t red_port, sche
         auto v6_bytes = blue_addr.to_v6().to_bytes();
         m_data.insert(m_data.end(), v6_bytes.begin(), v6_bytes.end());
     }
-    
+
     m_data.push_back(static_cast<uint8_t>((blue_port >> 8) & 0xFF));
     m_data.push_back(static_cast<uint8_t>(blue_port & 0xFF));
     m_data.push_back(static_cast<uint8_t>(blue_role));
@@ -159,12 +158,12 @@ couple::couple(const boost::asio::ip::address& red_addr, uint16_t red_port, sche
 peer couple::red() const
 {
     if (m_data.empty())
-        throw malformed_query("Empty couple data");
+        throw malformed_message("Empty couple data");
 
     size_t len = m_data[0] == 4 ? 8 : 20;
 
     if (m_data.size() < len)
-        throw malformed_query("Invalid red peer data");
+        throw malformed_message("Invalid red peer data");
 
     std::vector<uint8_t> buffer(m_data.begin(), m_data.begin() + len);
     return peer { buffer };
@@ -173,12 +172,12 @@ peer couple::red() const
 peer couple::blue() const
 {
     if (m_data.empty())
-        throw malformed_query("Empty couple data");
+        throw malformed_message("Empty couple data");
 
     size_t len = m_data[0] == 4 ? 8 : 20;
 
     if (m_data.size() < len * 2 || m_data[0] != m_data[len])
-        throw malformed_query("Invalid blue peer data");
+        throw malformed_message("Invalid blue peer data");
 
     std::vector<uint8_t> buffer(m_data.begin() + len, m_data.begin() + len * 2);
     return peer { buffer };
@@ -187,7 +186,7 @@ peer couple::blue() const
 query::kind query::type() const
 {
     if (m_data.empty())
-        throw malformed_query("Invalid query data");
+        throw malformed_message("Invalid query data");
 
     return static_cast<kind>(m_data[0]); // Tag is first byte
 }
@@ -197,7 +196,7 @@ query::value query::payload() const
     kind which = type();
 
     if (m_data.size() < 6) // tag (1) + length (4) + payload (1) minimum
-         throw malformed_query("Invalid protocol payload");
+         throw malformed_message("Invalid protocol payload");
 
     if (which == kind::provide)
     {
@@ -207,18 +206,13 @@ query::value query::payload() const
     {
         size_t len = m_data[5] == 4 ? 16 : 40; // Check address type after tag + length
         if (m_data.size() < 1 + 4 + len) // tag + length + payload
-            throw malformed_query("Invalid couple payload");
+            throw malformed_message("Invalid couple payload");
 
         std::vector<uint8_t> buffer(m_data.begin() + 5, m_data.begin() + 5 + len); // Skip tag + length
         return couple { buffer };
     }
 
-    throw malformed_query("Invalid query kind");
-}
-
-query::query(const std::vector<uint8_t>& data)
-    : buffer(data)
-{
+    throw malformed_message("Invalid query kind");
 }
 
 uint32_t query::length() const
@@ -261,7 +255,7 @@ query query::make_connect_query(const peer& red, const peer& blue)
 reply::kind reply::type() const
 {
     if (m_data.empty())
-        throw malformed_query("Invalid reply data");
+        throw malformed_message("Invalid reply data");
 
     return static_cast<kind>(m_data[0]); // Tag is first byte
 }
@@ -272,12 +266,12 @@ reply::value reply::payload() const
     if (which == kind::binding)
     {
         if (m_data.size() < 6) // tag (1) + length (4) + address type (1) minimum
-            throw malformed_query("Invalid binding payload");
+            throw malformed_message("Invalid binding payload");
 
         size_t len = (m_data[5] == 4) ? 7 : 19; // Check address type after tag + length
 
         if (m_data.size() < 1 + 4 + len) // tag + length + payload
-            throw malformed_query("Invalid binding payload");
+            throw malformed_message("Invalid binding payload");
 
         std::vector<uint8_t> buffer(m_data.begin() + 5, m_data.begin() + 5 + len); // Skip tag + length
         return endpoint { buffer };
@@ -285,7 +279,7 @@ reply::value reply::payload() const
     else if (which == kind::mistake)
     {
         if (m_data.size() < 6) // tag (1) + length (4) + error code (1)
-            throw malformed_query("Invalid mistake payload");
+            throw malformed_message("Invalid mistake payload");
 
         return static_cast<failure>(m_data[5]); // Skip tag + length
     }
@@ -294,12 +288,7 @@ reply::value reply::payload() const
         return true;
     }
 
-    throw malformed_query("Invalid reply kind");
-}
-
-reply::reply(const std::vector<uint8_t>& data)
-    : buffer(data)
-{
+    throw malformed_message("Invalid reply kind");
 }
 
 uint32_t reply::length() const
@@ -313,7 +302,7 @@ uint32_t reply::length() const
 reply reply::make_binding_reply(const endpoint& relay)
 {
     reply result;
-    
+
     result.m_data.push_back(static_cast<uint8_t>(kind::binding));
     result.m_data.insert(result.m_data.end(), {0, 0, 0, 0});
     result.m_data.insert(result.m_data.end(), relay.data(), relay.data() + relay.size());

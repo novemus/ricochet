@@ -3,7 +3,7 @@
 #include <boost/asio.hpp>
 #include <boost/asio/ip/address.hpp>
 #include <boost/asio/ssl.hpp>
-#include <ricochet.h>
+#include "proto.h"
 
 namespace ricochet {
 

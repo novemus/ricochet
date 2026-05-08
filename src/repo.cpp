@@ -2,7 +2,7 @@
 #include <sstream>
 #include <iomanip>
 #include <iostream>
-#include <repo.h>
+#include "repo.h"
 
 namespace ricochet {
 
@@ -161,15 +161,13 @@ std::set<std::filesystem::path> repository::collect_current_certificate_files() 
             if (!host.is_directory())
                 continue;
 
-            std::filesystem::path cert_file_path = host.path() / "cert.crt";
-            if (!std::filesystem::exists(cert_file_path))
+            for (const auto& file : std::filesystem::directory_iterator(host))
             {
-                cert_file_path = host.path() / "cert.pem";
-                if (!std::filesystem::exists(cert_file_path))
-                    continue;
+                if (file.path().extension() == ".crt" || file.path().extension() == ".pem" )
+                {
+                    files.insert(std::filesystem::absolute(file.path()));
+                }
             }
-
-            files.insert(std::filesystem::absolute(cert_file_path));
         }
     }
 

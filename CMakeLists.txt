@@ -4,15 +4,15 @@ project(ricochet VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Boost 1.74 REQUIRED COMPONENTS system unit_test_framework program_options)
+find_package(Boost 1.74 REQUIRED COMPONENTS system unit_test_framework program_options coroutine)
 find_package(OpenSSL REQUIRED)
 
 include_directories(${CMAKE_SOURCE_DIR})
 include_directories(${Boost_INCLUDE_DIRS})
 
 add_executable(ricochet
-    src/ricochet.h
-    src/ricochet.cpp
+    src/proto.h
+    src/proto.cpp
     src/session.h
     src/session.cpp
     src/relay.h
@@ -33,14 +33,40 @@ else()
     target_compile_options(ricochet PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+include(GenerateExportHeader)
+
+add_library(libricochet src/proto.cpp src/client.cpp src/agent.cpp)
+add_library(ricochet::libricochet ALIAS libricochet)
+
+generate_export_header(libricochet EXPORT_FILE_NAME "export_header/ricochet/export.h")
+
+target_link_libraries(libricochet ${Boost_LIBRARIES} OpenSSL::Crypto OpenSSL::SSL)
+target_include_directories(libricochet PRIVATE ${CMAKE_SOURCE_DIR}/src)
+
+if (NOT BUILD_SHARED_LIBS)
+    target_compile_definitions(libricochet PUBLIC LIBRICOCHET_STATIC_DEFINE)
+endif()
+
+if(MSVC)
+    target_compile_options(libricochet PRIVATE /W4)
+else()
+    target_compile_options(libricochet PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 # Enable testing
 enable_testing()
 
 # Create test executable
 add_executable(ricochet_tests
-    src/ricochet.cpp
+    src/proto.cpp
     src/repo.cpp
     src/relay.cpp
+    src/session.cpp
+    src/server.cpp
+    src/client.cpp
+    src/agent.cpp
+    tests/repo.cpp
+    tests/relay.cpp
     tests/main.cpp
     tests/protocol/enums.cpp
     tests/protocol/buffer.cpp
@@ -49,8 +75,9 @@ add_executable(ricochet_tests
     tests/protocol/couple.cpp
     tests/protocol/query.cpp
     tests/protocol/reply.cpp
-    tests/repo.cpp
-    tests/relay.cpp
+    tests/integration/fixture.cpp
+    tests/integration/client.cpp
+    tests/integration/agent.cpp
 )
 
 target_link_libraries(ricochet_tests 
@@ -69,4 +96,4 @@ else()
 endif()
 
 # Add test
-add_test(NAME ricochet_unit_tests COMMAND ricochet_tests)
+add_test(NAME ricochet_tests COMMAND ricochet_tests)

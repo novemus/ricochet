@@ -1,5 +1,5 @@
 #include <boost/test/unit_test.hpp>
-#include <ricochet.h>
+#include "proto.h"
 
 using namespace ricochet;
 
@@ -20,7 +20,7 @@ BOOST_AUTO_TEST_CASE(schema_values)
 BOOST_AUTO_TEST_CASE(failure_values)
 {
     BOOST_CHECK_EQUAL(static_cast<uint8_t>(failure::server_error), 0);
-    BOOST_CHECK_EQUAL(static_cast<uint8_t>(failure::malformed_query), 1);
+    BOOST_CHECK_EQUAL(static_cast<uint8_t>(failure::malformed_message), 1);
     BOOST_CHECK_EQUAL(static_cast<uint8_t>(failure::unavailable_proto), 2);
     BOOST_CHECK_EQUAL(static_cast<uint8_t>(failure::limit_reached), 3);
 }

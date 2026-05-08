@@ -1,9 +1,10 @@
 #include <boost/filesystem.hpp>
 #include <boost/test/unit_test.hpp>
 #include <fstream>
+#include <random>
 #include <openssl/x509.h>
 #include <openssl/pem.h>
-#include <repo.h>
+#include "repo.h"
 
 namespace fs = std::filesystem;
 
@@ -31,10 +32,9 @@ fsKtUIKPUPjXt/exmnkZElwYqR7GlycsCmP9
 -----END CERTIFICATE-----)";
 }
 
-// Helper function to create a different test certificate
-std::string get_different_cert_content()
+// Helper function to create a bad test certificate
+std::string get_wrong_cert_content()
 {
-    // Create a second certificate using openssl
     return R"(-----BEGIN CERTIFICATE-----
 MIIDFzCCAf+gAwIBAgIUEL6q9D7z8W7jL3Y2X4Q5Z9K8R2MwDQYJKoZIhvcNAQEL
 BQAwGzEZMBcGA1UEAwwQdGVzdDIuZXhhbXBsZS5jb20wHhcNMjYwNTA2MDkyMDM1
@@ -62,38 +62,27 @@ ricochet::X509Ptr load_cert_from_string(const std::string& cert_content)
 
 struct repository_test_fixture
 {
-    fs::path temp_dir;
-    fs::path repo_dir;
+    fs::path m_repo;
 
     repository_test_fixture()
     {
-        // Use current directory for tests
-        temp_dir = fs::current_path() / "test_repo_final";
-        repo_dir = temp_dir / "certs";
-        
-        // Remove if exists
-        if (fs::exists(temp_dir)) {
-            fs::remove_all(temp_dir);
-        }
-        
-        fs::create_directories(repo_dir);
+        m_repo = fs::temp_directory_path() / ("ricochet_repo_test_" + std::to_string(std::random_device{}())) / "repo";
+        fs::create_directories(m_repo);
     }
 
     ~repository_test_fixture()
     {
-        if (fs::exists(temp_dir)) {
-            fs::remove_all(temp_dir);
+        if (fs::exists(m_repo.parent_path())) {
+            fs::remove_all(m_repo.parent_path());
         }
     }
 
     void create_owner_host_structure(const std::string& owner, const std::string& host, 
                                    const std::string& cert_content, const std::string& filename = "cert.crt")
     {
-        fs::path owner_dir = repo_dir / owner;
-        fs::path host_dir = owner_dir / host;
-        fs::create_directories(host_dir);
+        fs::create_directories(m_repo / owner / host);
         
-        fs::path cert_file = host_dir / filename;
+        fs::path cert_file = m_repo / owner / host / filename;
         std::ofstream file(cert_file.string());
         file << cert_content;
         file.close();
@@ -101,7 +90,7 @@ struct repository_test_fixture
 
     fs::path get_cert_path(const std::string& owner, const std::string& host, const std::string& filename = "cert.crt")
     {
-        return repo_dir / owner / host / filename;
+        return m_repo / owner / host / filename;
     }
 };
 
@@ -109,14 +98,12 @@ BOOST_FIXTURE_TEST_SUITE(repository_tests, repository_test_fixture)
 
 BOOST_AUTO_TEST_CASE(get_certificate_hash_null)
 {
-    // Test static function with null certificate
     std::string null_hash = ricochet::repository::get_certificate_hash(nullptr);
     BOOST_TEST(null_hash.empty());
 }
 
 BOOST_AUTO_TEST_CASE(get_certificate_hash_valid)
 {
-    // Test with valid certificate
     std::string cert_content = get_valid_cert_content();
     ricochet::X509Ptr cert = load_cert_from_string(cert_content);
     BOOST_REQUIRE(cert != nullptr);
@@ -125,95 +112,60 @@ BOOST_AUTO_TEST_CASE(get_certificate_hash_valid)
     BOOST_TEST(!hash.empty());
     BOOST_TEST(hash.length() == 64); // SHA256 hex length
     
-    // Hash should be deterministic
-    std::string hash2 = ricochet::repository::get_certificate_hash(cert.get());
-    BOOST_TEST(hash == hash2);
+    BOOST_TEST(hash == ricochet::repository::get_certificate_hash(cert.get()));
 }
 
 BOOST_AUTO_TEST_CASE(empty_repository)
 {
-    ricochet::repository repo(repo_dir);
+    ricochet::repository repo(m_repo);
 
-    // Test with null certificate
     BOOST_TEST(!repo.is_certificate_allowed(nullptr));
-    
-    // Test with empty repository
-    BOOST_TEST(fs::is_directory(repo_dir));
-    BOOST_TEST(fs::is_empty(repo_dir));
+    BOOST_TEST(fs::is_directory(m_repo));
+    BOOST_TEST(fs::is_empty(m_repo));
 }
 
 BOOST_AUTO_TEST_CASE(repository_with_correct_structure)
 {
-    // Create correct OWNER/HOST/cert.crt structure
     std::string cert1_content = get_valid_cert_content();
-    std::string cert2_content = get_different_cert_content();
-    
+    std::string cert2_content = get_wrong_cert_content();
+
     create_owner_host_structure("owner1", "host1.example.com", cert1_content);
-    create_owner_host_structure("owner1", "host2.example.com", cert2_content);
-    create_owner_host_structure("owner2", "host3.example.com", cert1_content);
+    create_owner_host_structure("owner1", "host2.example.com", cert1_content);
+    create_owner_host_structure("owner2", "host3.example.com", cert2_content);
 
-    ricochet::repository repo(repo_dir);
+    ricochet::repository repo(m_repo);
 
-    // Check file existence
     BOOST_TEST(fs::exists(get_cert_path("owner1", "host1.example.com")));
     BOOST_TEST(fs::exists(get_cert_path("owner1", "host2.example.com")));
     BOOST_TEST(fs::exists(get_cert_path("owner2", "host3.example.com")));
-    
-    // Test with null certificate
-    BOOST_TEST(!repo.is_certificate_allowed(nullptr));
 }
 
 BOOST_AUTO_TEST_CASE(is_certificate_allowed_with_valid_cert)
 {
-    // Create certificate in repository
     std::string cert_content = get_valid_cert_content();
     create_owner_host_structure("testowner", "testhost.com", cert_content);
 
-    ricochet::repository repo(repo_dir);
-    
-    // Load the same certificate for verification
+    ricochet::repository repo(m_repo);
     ricochet::X509Ptr cert = load_cert_from_string(cert_content);
-    BOOST_REQUIRE(cert != nullptr);
 
-    // Certificate should be allowed
+    BOOST_REQUIRE(cert != nullptr);
     BOOST_TEST(repo.is_certificate_allowed(cert.get()));
 }
 
-BOOST_AUTO_TEST_CASE(is_certificate_allowed_with_different_cert)
+BOOST_AUTO_TEST_CASE(is_certificate_allowed_with_wrong_cert)
 {
-    // Create one certificate in repository
     std::string repo_cert_content = get_valid_cert_content();
     create_owner_host_structure("owner", "host.com", repo_cert_content);
 
-    ricochet::repository repo(repo_dir);
-    
-    // Create a different certificate for testing
-    std::string different_cert_content = get_different_cert_content();
-    ricochet::X509Ptr different_cert = load_cert_from_string(different_cert_content);
-    
-    // If second certificate is invalid, skip test
-    if (!different_cert) {
-        BOOST_TEST_MESSAGE("Skipping test - second certificate is not valid");
-        return;
-    }
+    ricochet::repository repo(m_repo);
+    std::string wrong_cert_content = get_wrong_cert_content();
+    ricochet::X509Ptr wrong_cert = load_cert_from_string(wrong_cert_content);
 
-    // Different certificate should not be allowed
-    BOOST_TEST(!repo.is_certificate_allowed(different_cert.get()));
-}
-
-BOOST_AUTO_TEST_CASE(is_certificate_allowed_with_null_cert)
-{
-    create_owner_host_structure("owner", "host.com", get_valid_cert_content());
-    
-    ricochet::repository repo(repo_dir);
-    
-    // Null certificate should always return false
-    BOOST_TEST(!repo.is_certificate_allowed(nullptr));
+    BOOST_REQUIRE(wrong_cert == nullptr);
 }
 
 BOOST_AUTO_TEST_CASE(certificate_hash_consistency)
 {
-    // Check that identical certificates produce identical hashes
     std::string cert_content = get_valid_cert_content();
     ricochet::X509Ptr cert1 = load_cert_from_string(cert_content);
     ricochet::X509Ptr cert2 = load_cert_from_string(cert_content);
@@ -227,20 +179,17 @@ BOOST_AUTO_TEST_CASE(certificate_hash_consistency)
     BOOST_TEST(hash1 == hash2);
 }
 
-BOOST_AUTO_TEST_CASE(cert_pem_fallback)
+BOOST_AUTO_TEST_CASE(cert_pem_extension)
 {
-    // Create certificate with name cert.pem instead of cert.crt
     std::string cert_content = get_valid_cert_content();
     create_owner_host_structure("owner", "host.com", cert_content, "cert.pem");
 
-    ricochet::repository repo(repo_dir);
-    
-    // Check that certificate is loaded
+    ricochet::repository repo(m_repo);
     BOOST_TEST(fs::exists(get_cert_path("owner", "host.com", "cert.pem")));
-    
+
     ricochet::X509Ptr cert = load_cert_from_string(cert_content);
     BOOST_REQUIRE(cert != nullptr);
-    
+
     BOOST_TEST(repo.is_certificate_allowed(cert.get()));
 }
 

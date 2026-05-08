@@ -3,33 +3,31 @@
 #include <boost/asio/executor_work_guard.hpp>
 #include <memory>
 #include <vector>
-#include <thread>
-#include <atomic>
 #include <chrono>
-#include <ricochet.h>
-#include <relay.h>
+#include "proto.h"
+#include "relay.h"
 
 struct relay_test_fixture
 {
     boost::asio::io_context io;
-    std::thread thread;
+    boost::asio::thread_pool pool;
     boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work;
 
     relay_test_fixture() : work(boost::asio::make_work_guard(io))
     {
-        thread = std::thread([this]()
+        for (size_t i = 0; i < 4; ++i)
         {
-            io.run();
-        });
+            boost::asio::post(pool, [&]()
+            {
+                io.run();
+            });
+        }
     }
 
     ~relay_test_fixture()
     {
         io.stop();
-        if (thread.joinable())
-        {
-            thread.join();
-        }
+        pool.join();
     }
 };
 
@@ -155,7 +153,7 @@ struct udp_helper
         });
 
         boost::asio::deadline_timer receive_timer(right.get_executor());
-        receive_timer.expires_from_now(boost::posix_time::milliseconds(300));
+        receive_timer.expires_from_now(boost::posix_time::milliseconds(500));
         receive_timer.async_wait([&](const boost::system::error_code& ec)
         {
             if (ec.value() != boost::asio::error::operation_aborted)
@@ -198,7 +196,7 @@ struct udp_helper
         });
 
         boost::asio::deadline_timer receive_timer(to.get_executor());
-        receive_timer.expires_from_now(boost::posix_time::milliseconds(300));
+        receive_timer.expires_from_now(boost::posix_time::milliseconds(500));
         receive_timer.async_wait([&](const boost::system::error_code& ec)
         {
             if (ec.value() != boost::asio::error::operation_aborted)
@@ -244,7 +242,7 @@ BOOST_AUTO_TEST_CASE(get_outgoing_address)
         BOOST_CHECK(!ipv4_address.is_unspecified());
         BOOST_CHECK(ipv4_address.is_v4());
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("IPv4 unavailable: " + std::string(e.what()));
         BOOST_TEST(true);
@@ -258,7 +256,7 @@ BOOST_AUTO_TEST_CASE(get_outgoing_address)
         BOOST_CHECK(!ipv6_address.is_unspecified());
         BOOST_CHECK(ipv6_address.is_v4());
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("IPv6 unavailable: " + std::string(e.what()));
         BOOST_TEST(true);
@@ -275,7 +273,7 @@ BOOST_AUTO_TEST_CASE(get_outgoing_address_with_specified_address)
         BOOST_TEST(result == specified_address);
         BOOST_TEST_MESSAGE("Specified address returned correctly: " + result.to_string());
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("IPv4 unavailable: " + std::string(e.what()));
         BOOST_TEST(false);
@@ -289,7 +287,7 @@ BOOST_AUTO_TEST_CASE(get_outgoing_address_with_specified_address)
         BOOST_TEST(result == specified_address);
         BOOST_TEST_MESSAGE("Specified address returned correctly: " + result.to_string());
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("IPv6 unavailable: " + std::string(e.what()));
         BOOST_TEST(false);
@@ -306,7 +304,7 @@ BOOST_AUTO_TEST_CASE(get_outgoing_address_with_unspecified_address)
         BOOST_TEST(result != unspecified_address);
         BOOST_TEST_MESSAGE("Detected outgoing address: " + result.to_string());
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("IPv4 unavailable: " + std::string(e.what()));
         BOOST_TEST(true);
@@ -320,7 +318,7 @@ BOOST_AUTO_TEST_CASE(get_outgoing_address_with_unspecified_address)
         BOOST_TEST(result != unspecified_address);
         BOOST_TEST_MESSAGE("Detected outgoing address: " + result.to_string());
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("IPv6 unavailable: " + std::string(e.what()));
         BOOST_TEST(true);
@@ -344,7 +342,7 @@ BOOST_AUTO_TEST_CASE(environment_variable_parsing_ipv4)
         BOOST_TEST(result.is_v4());
         BOOST_TEST_MESSAGE("Environment variable parsing test completed");
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("IPv4 unavailable: " + std::string(e.what()));
         BOOST_TEST(true);
@@ -386,7 +384,7 @@ BOOST_AUTO_TEST_CASE(environment_variable_parsing_ipv6)
         BOOST_TEST(result.is_v6());
         BOOST_TEST_MESSAGE("Environment variable parsing test completed");
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("IPv6 unavailable: " + std::string(e.what()));
         BOOST_TEST(true);
@@ -431,7 +429,7 @@ BOOST_AUTO_TEST_CASE(invalid_environment_variables)
         BOOST_TEST(result.is_v4());
         BOOST_TEST_MESSAGE("Invalid IPv4 env var handled gracefully");
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("IPv4 unavailable: " + std::string(e.what()));
         BOOST_TEST(true);
@@ -444,7 +442,7 @@ BOOST_AUTO_TEST_CASE(invalid_environment_variables)
         BOOST_TEST(result.is_v6());
         BOOST_TEST_MESSAGE("Invalid IPv4 env var handled gracefully");
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("IPv6 unavailable: " + std::string(e.what()));
         BOOST_TEST(true);
@@ -516,7 +514,7 @@ BOOST_AUTO_TEST_CASE(tcp4_relay_base)
         BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
         BOOST_TEST_MESSAGE("TCP4 relay base test passed");
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("TCP4 unavailable: " + std::string(e.what()));
         BOOST_TEST(true);
@@ -542,7 +540,6 @@ BOOST_AUTO_TEST_CASE(tcp6_relay_base)
             cleanup
         );
 
-
         BOOST_TEST(tcp_relay->get_protocol() == ricochet::protocol::tcp6);
 
         auto endpoint = tcp_relay->get_endpoint();
@@ -558,7 +555,7 @@ BOOST_AUTO_TEST_CASE(tcp6_relay_base)
         BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
         BOOST_TEST_MESSAGE("TCP6 relay base test passed");
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("TCP6 unavailable: " + std::string(e.what()));
         BOOST_TEST(true);
@@ -600,7 +597,7 @@ BOOST_AUTO_TEST_CASE(udp4_relay_base)
         BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
         BOOST_TEST_MESSAGE("UDP4 relay base test passed");
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("UDP4 unavailable: " + std::string(e.what()));
         BOOST_TEST(true);
@@ -642,7 +639,7 @@ BOOST_AUTO_TEST_CASE(udp6_relay_base)
         BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
         BOOST_TEST_MESSAGE("UDP6 relay base test passed");
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("UDP6 unavailable: " + std::string(e.what()));
         BOOST_TEST(true);
@@ -701,7 +698,7 @@ BOOST_AUTO_TEST_CASE(tcp4_client_client_relay)
         BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
         BOOST_TEST_MESSAGE("TCP4 clien-client relay test passed");
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("TCP4 unavailable: " + std::string(e.what()));
         BOOST_TEST(true);
@@ -755,7 +752,7 @@ BOOST_AUTO_TEST_CASE(tcp6_client_client_relay)
         BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
         BOOST_TEST_MESSAGE("TCP6 clien-client relay test passed");
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("TCP6 unavailable: " + std::string(e.what()));
         BOOST_TEST(true);
@@ -809,7 +806,7 @@ BOOST_AUTO_TEST_CASE(udp4_client_client_relay)
         BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
         BOOST_TEST_MESSAGE("UDP4 clien-client relay test passed");
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("UDP4 unavailable: " + std::string(e.what()));
         BOOST_TEST(true);
@@ -863,7 +860,7 @@ BOOST_AUTO_TEST_CASE(udp6_client_client_relay)
         BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
         BOOST_TEST_MESSAGE("UDP6 clien-client relay test passed");
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("UDP6 unavailable: " + std::string(e.what()));
         BOOST_TEST(true);
@@ -919,7 +916,7 @@ BOOST_AUTO_TEST_CASE(tcp4_client_server_relay)
         BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
         BOOST_TEST_MESSAGE("TCP4 client-server relay test passed");
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("TCP4 unavailable: " + std::string(e.what()));
         BOOST_TEST(true);
@@ -975,7 +972,7 @@ BOOST_AUTO_TEST_CASE(tcp6_client_server_relay)
         BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
         BOOST_TEST_MESSAGE("TCP6 client-server relay test passed");
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("TCP6 unavailable: " + std::string(e.what()));
         BOOST_TEST(true);
@@ -1033,7 +1030,7 @@ BOOST_AUTO_TEST_CASE(udp4_client_server_relay)
         BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
         BOOST_TEST_MESSAGE("UDP4 client-server relay test passed");
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("UDP4 unavailable: " + std::string(e.what()));
         BOOST_TEST(true);
@@ -1091,7 +1088,7 @@ BOOST_AUTO_TEST_CASE(udp6_client_server_relay)
         BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
         BOOST_TEST_MESSAGE("UDP6 client-server relay test passed");
     }
-    catch (const ricochet::protocol_unavailable& e)
+    catch (const ricochet::unavailable_proto& e)
     {
         BOOST_TEST_MESSAGE("UDP6 unavailable: " + std::string(e.what()));
         BOOST_TEST(true);

@@ -1,7 +1,7 @@
 #include <boost/test/unit_test.hpp>
 #include <boost/asio.hpp>
 #include <vector>
-#include <ricochet.h>
+#include "proto.h"
 
 using namespace ricochet;
 
@@ -35,7 +35,7 @@ BOOST_AUTO_TEST_CASE(reply_confirm_type)
 
 BOOST_AUTO_TEST_CASE(reply_mistake_type)
 {
-    reply r = reply::make_mistake_reply(failure::malformed_query);
+    reply r = reply::make_mistake_reply(failure::malformed_message);
     BOOST_CHECK_EQUAL(static_cast<uint8_t>(r.type()), 2); // mistake kind
 }
 
@@ -87,7 +87,7 @@ BOOST_AUTO_TEST_CASE(reply_inheritance_from_buffer)
 BOOST_AUTO_TEST_CASE(reply_make_mistake_all_failures)
 {
     reply r_server_error = reply::make_mistake_reply(failure::server_error);
-    reply r_malformed = reply::make_mistake_reply(failure::malformed_query);
+    reply r_malformed = reply::make_mistake_reply(failure::malformed_message);
     reply r_unavailable = reply::make_mistake_reply(failure::unavailable_proto);
     reply r_limit = reply::make_mistake_reply(failure::limit_reached);
     
@@ -102,7 +102,7 @@ BOOST_AUTO_TEST_CASE(reply_make_mistake_all_failures)
     reply::value payload_limit = r_limit.payload();
     
     BOOST_CHECK(std::get<failure>(payload_server) == failure::server_error);
-    BOOST_CHECK(std::get<failure>(payload_malformed) == failure::malformed_query);
+    BOOST_CHECK(std::get<failure>(payload_malformed) == failure::malformed_message);
     BOOST_CHECK(std::get<failure>(payload_unavailable) == failure::unavailable_proto);
     BOOST_CHECK(std::get<failure>(payload_limit) == failure::limit_reached);
 }

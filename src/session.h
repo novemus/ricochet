@@ -4,14 +4,15 @@
 #include <boost/asio/ssl.hpp>
 #include <boost/bind/bind.hpp>
 #include <memory>
-#include <ricochet.h>
-#include <relay.h>
+#include "proto.h"
+#include "relay.h"
 
 namespace ricochet {
 
 class session : public std::enable_shared_from_this<session>
 {
     boost::asio::io_context& m_io;
+    std::shared_ptr<boost::asio::ssl::context> m_ssl;
     boost::asio::ssl::stream<boost::asio::ip::tcp::socket> m_socket;
     boost::asio::io_context::strand m_strand;
     boost::asio::deadline_timer m_timer;
@@ -23,6 +24,7 @@ class session : public std::enable_shared_from_this<session>
 public:
 
     session(boost::asio::io_context& io,
+            std::shared_ptr<boost::asio::ssl::context> ssl,
             boost::asio::ssl::stream<boost::asio::ip::tcp::socket> socket,
             boost::posix_time::seconds idle);
 
@@ -35,9 +37,9 @@ public:
 private:
 
     void do_close();
-    void do_read();
-    void do_read_length();
-    void do_read_payload(uint32_t len);
+    void do_shutdown();
+    void do_read_header();
+    void do_read_payload();
     void do_write(const ricochet::reply& msg);
     void handle_query();
     void handle_provide_query();

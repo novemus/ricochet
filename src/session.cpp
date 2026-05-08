@@ -1,18 +1,20 @@
 #include <boost/bind.hpp>
-#include <session.h>
+#include "session.h"
 
 namespace ricochet {
 
 session::session(boost::asio::io_context& io,
+                std::shared_ptr<boost::asio::ssl::context> ssl,
                  boost::asio::ssl::stream<boost::asio::ip::tcp::socket> socket,
                  boost::posix_time::seconds idle)
     : m_io(io)
+    , m_ssl(ssl)
     , m_socket(std::move(socket))
     , m_strand(m_io)
     , m_timer(m_io)
     , m_idle(idle)
+    , m_query(4096)
 {
-    m_query.resize(4096); 
 }
 
 session::~session()
@@ -33,7 +35,7 @@ void session::set_cleaner(cleanup_function clean)
 
 void session::start()
 {
-    do_read();
+    do_read_header();
 }
 
 void session::close()
@@ -63,15 +65,14 @@ void session::do_close()
     boost::system::error_code ec;
     m_timer.cancel(ec);
 
+    if (m_relay)
+        m_relay->close();
+
     if (m_socket.lowest_layer().is_open())
     {
-        m_socket.shutdown(ec);
+        boost::system::error_code ec;
+        m_socket.lowest_layer().shutdown(boost::asio::socket_base::shutdown_type::shutdown_both, ec);
         m_socket.lowest_layer().close(ec);
-    }
-
-    if (m_relay)
-    {
-        m_relay->close();
     }
 
     if (m_clean)
@@ -81,10 +82,48 @@ void session::do_close()
     }
 }
 
-void session::do_read()
+void session::do_shutdown()
+{
+    boost::system::error_code ec;
+    m_timer.cancel(ec);
+
+    if (m_socket.lowest_layer().is_open())
+    {
+        auto finalize = [this, weak = weak_from_this()](const boost::system::error_code&)
+        {
+            auto self = weak.lock();
+            if (!self)
+                return;
+
+            boost::system::error_code ec;
+            m_socket.lowest_layer().shutdown(boost::asio::socket_base::shutdown_type::shutdown_both, ec);
+            m_socket.lowest_layer().close(ec);
+
+            if (m_relay)
+                m_relay->close();
+
+            if (m_clean)
+            {
+                m_clean();
+                m_clean = nullptr;
+            }
+        };
+
+        m_timer.expires_from_now(boost::posix_time::seconds(2));
+        m_timer.async_wait(m_strand.wrap(finalize));
+        m_socket.async_shutdown(m_strand.wrap(finalize));
+    }
+    else if (m_clean)
+    {
+        m_clean();
+        m_clean = nullptr;
+    }
+}
+
+void session::do_read_header()
 {
     start_timer();
-    m_socket.async_read_some(boost::asio::buffer(m_query.data(), 1),
+    m_socket.async_read_some(boost::asio::buffer(m_query.data(), query::header_size),
         m_strand.wrap([this, weak = weak_from_this()](const boost::system::error_code& ec, std::size_t size)
         {
             auto self = weak.lock();
@@ -93,31 +132,40 @@ void session::do_read()
 
             if (!ec)
             {
-                if (size == 1)
+                if (size == query::header_size)
                 {
                     if (m_relay && m_query.type() != ricochet::query::kind::connect)
                     {
-                        send_error_reply(ricochet::failure::malformed_query);
+                        send_error_reply(ricochet::failure::malformed_message);
                         return;
                     }
-                    do_read_length();
+                    if (m_query.length() > m_query.size() - query::header_size)
+                    {
+                        send_error_reply(ricochet::failure::malformed_message);
+                        return;
+                    }
+                    do_read_payload();
                 }
                 else
                 {
                     send_error_reply(ricochet::failure::server_error);
                 }
             }
+            else if (ec == boost::asio::error::eof)
+            {
+                do_shutdown();
+            }
             else
             {
-                send_error_reply(ricochet::failure::server_error);
+                do_close();
             }
         }));
 }
 
-void session::do_read_length()
+void session::do_read_payload()
 {
     start_timer();
-    m_socket.async_read_some(boost::asio::buffer(m_query.data() + 1, 4),
+    m_socket.async_read_some(boost::asio::buffer(m_query.data() + query::header_size, m_query.length()),
         m_strand.wrap([this, weak = weak_from_this()](const boost::system::error_code& ec, std::size_t size)
         {
             auto self = weak.lock();
@@ -126,42 +174,7 @@ void session::do_read_length()
 
             if (!ec)
             {
-                if (size == 4)
-                {
-                    uint32_t length = m_query.length();
-                    if (length > m_query.size() - 5)
-                    {
-                        send_error_reply(ricochet::failure::malformed_query);
-                        return;
-                    }
-
-                    do_read_payload(length);
-                }
-                else
-                {
-                    send_error_reply(ricochet::failure::server_error);
-                }
-            }
-            else
-            {
-                send_error_reply(ricochet::failure::server_error);
-            }
-        }));
-}
-
-void session::do_read_payload(uint32_t length)
-{
-    start_timer();
-    m_socket.async_read_some(boost::asio::buffer(m_query.data() + 5, length),
-        m_strand.wrap([this, weak = weak_from_this(), length](const boost::system::error_code& ec, std::size_t size)
-        {
-            auto self = weak.lock();
-            if (!self)
-                return;
-
-            if (!ec)
-            {
-                if (size == length)
+                if (size == m_query.length())
                 {
                     handle_query();
                 }
@@ -170,9 +183,13 @@ void session::do_read_payload(uint32_t length)
                     send_error_reply(ricochet::failure::server_error);
                 }
             }
+            else if (ec == boost::asio::error::eof)
+            {
+                do_shutdown();
+            }
             else
             {
-                send_error_reply(ricochet::failure::server_error);
+                do_close();
             }
         }));
 }
@@ -190,15 +207,15 @@ void session::handle_query()
                 handle_connect_query();
                 break;
             default:
-                send_error_reply(ricochet::failure::malformed_query);
+                send_error_reply(ricochet::failure::malformed_message);
                 break;
         }
     }
-    catch (const malformed_query& e)
+    catch (const malformed_message& e)
     {
-        send_error_reply(ricochet::failure::malformed_query);
+        send_error_reply(ricochet::failure::malformed_message);
     }
-    catch (const protocol_unavailable& e)
+    catch (const unavailable_proto& e)
     {
         send_error_reply(ricochet::failure::unavailable_proto);
     }
@@ -224,22 +241,15 @@ void session::do_write(const ricochet::reply& msg)
             }
             else if (msg.type() == ricochet::reply::kind::binding)
             {
-                do_read();
+                do_read_header();
             }
             else if (msg.type() == ricochet::reply::kind::confirm)
             {
-                boost::system::error_code ec;
-                m_timer.cancel(ec);
-
-                if (m_socket.lowest_layer().is_open())
-                {
-                    m_socket.shutdown(ec);
-                    m_socket.lowest_layer().close(ec);
-                }
+                do_shutdown();
             }
             else if (msg.type() == ricochet::reply::kind::mistake)
             {
-                do_close();
+                do_shutdown();
             }
         }));
 }
@@ -258,7 +268,7 @@ void session::handle_provide_query()
             m_relay = std::make_shared<ricochet::udp_relay>(m_io, proto, m_idle, m_clean);
             break;
         default:
-            throw malformed_query("Unsupported protocol");
+            throw malformed_message("Unsupported protocol");
     }
 
     m_clean = nullptr;
@@ -276,19 +286,19 @@ void session::handle_connect_query()
         
         if (red.role() == ricochet::schema::server && (red.location().address().is_unspecified() || red.location().port() == 0))
         {
-            send_error_reply(ricochet::failure::malformed_query);
+            send_error_reply(ricochet::failure::malformed_message);
             return;
         }
         
         if (blue.role() == ricochet::schema::server && (blue.location().address().is_unspecified() || blue.location().port() == 0))
         {
-            send_error_reply(ricochet::failure::malformed_query);
+            send_error_reply(ricochet::failure::malformed_message);
             return;
         }
         
         if (red.role() == ricochet::schema::server && blue.role() == ricochet::schema::server)
         {
-            send_error_reply(ricochet::failure::malformed_query);
+            send_error_reply(ricochet::failure::malformed_message);
             return;
         }
         
@@ -304,7 +314,7 @@ void session::handle_connect_query()
         
         if (!protocol_matches)
         {
-            send_error_reply(ricochet::failure::malformed_query);
+            send_error_reply(ricochet::failure::malformed_message);
             return;
         }
         
