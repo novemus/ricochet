@@ -28,6 +28,7 @@ add_executable(ricochet
 
 target_link_libraries(ricochet ${Boost_LIBRARIES} OpenSSL::Crypto OpenSSL::SSL)
 target_include_directories(ricochet PRIVATE ${CMAKE_SOURCE_DIR}/src)
+set_target_properties(ricochet PROPERTIES DEBUG_POSTFIX "d")
 
 if(MSVC)
     target_compile_options(ricochet PRIVATE /W4)
@@ -44,6 +45,9 @@ generate_export_header(libricochet EXPORT_FILE_NAME "export_header/ricochet/expo
 
 target_link_libraries(libricochet ${Boost_LIBRARIES} OpenSSL::Crypto OpenSSL::SSL)
 target_include_directories(libricochet PRIVATE ${CMAKE_SOURCE_DIR}/src)
+
+set_target_properties(libricochet PROPERTIES DEBUG_POSTFIX "d" OUTPUT_NAME ricochet IMPORT_PREFIX "lib")
+set_target_properties(libricochet PROPERTIES SOVERSION ${PROJECT_VERSION_MAJOR} VERSION ${PROJECT_VERSION})
 
 if (NOT BUILD_SHARED_LIBS)
     target_compile_definitions(libricochet PUBLIC LIBRICOCHET_STATIC_DEFINE)
@@ -67,6 +71,7 @@ add_executable(ricochet_tests
     src/server.cpp
     src/client.cpp
     src/agent.cpp
+    src/logging.cpp
     tests/repo.cpp
     tests/relay.cpp
     tests/main.cpp
@@ -90,6 +95,7 @@ target_link_libraries(ricochet_tests
 )
 
 target_include_directories(ricochet_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+set_target_properties(ricochet_tests PROPERTIES DEBUG_POSTFIX "d")
 
 if(MSVC)
     target_compile_options(ricochet_tests PRIVATE /W4)

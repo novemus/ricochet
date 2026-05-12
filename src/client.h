@@ -11,8 +11,7 @@ namespace ricochet {
 class client
 {
 public:
-    client(boost::asio::io_context& io,
-           const boost::asio::ip::tcp::endpoint& server,
+    client(const boost::asio::ip::tcp::endpoint& server,
            const std::filesystem::path& cert,
            const std::filesystem::path key,
            const std::filesystem::path ca);
@@ -25,9 +24,8 @@ public:
 
 private:
 
-    void execute(const std::function<void()>& function, int timeout = 10000);
+    void execute(boost::asio::yield_context yield, const std::function<void()>& function, int timeout = 10000);
 
-    boost::asio::io_context& m_io;
     boost::asio::ssl::context m_ssl;
     boost::asio::ip::tcp::endpoint m_server;
     std::unique_ptr<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>> m_socket;

@@ -98,6 +98,7 @@ void server::do_accept()
 
                         std::string hash = m_repo.get_certificate_hash(cert.get());
                         auto relay = std::make_shared<session>(m_io, m_ssl, std::move(*socket), m_config.idle_timeout);
+
                         std::lock_guard<std::mutex> lock(m_mutex);
                         if (!check_limits(hash))
                         {
@@ -117,12 +118,10 @@ void server::do_accept()
                                     _dbg_ << "Session closed for client " << hash.substr(0, 16) << "..., active sessions: " << m_relays.size();
                                 }
                             });
-
-                            m_relays[hash].insert(relay);
-
                             _inf_ << "New session started for client " << hash.substr(0, 16) << "..., total sessions: " << m_relays[hash].size();
                             relay->start();
                         }
+                        m_relays[hash].insert(relay);
                     }
                     catch (const std::exception& e)
                     {

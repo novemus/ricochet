@@ -116,7 +116,6 @@ std::shared_ptr<ricochet::server> integration_test_fixture::create_server(bool u
 std::shared_ptr<ricochet::client> integration_test_fixture::create_client(bool using_ca)
 {
     return std::make_shared<ricochet::client>(
-        m_io,
         m_server,
         using_ca ? m_client_cert : m_client_self_cert,
         m_client_key,
@@ -127,7 +126,6 @@ std::shared_ptr<ricochet::client> integration_test_fixture::create_client(bool u
 std::shared_ptr<ricochet::agent> integration_test_fixture::create_agent(bool using_ca)
 {
     return ricochet::create_agent(
-        m_io,
         m_server,
         using_ca ? m_client_cert : m_client_self_cert,
         m_client_key,

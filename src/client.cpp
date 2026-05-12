@@ -4,13 +4,11 @@
 
 namespace ricochet {
 
-client::client(boost::asio::io_context& io,
-           const boost::asio::ip::tcp::endpoint& server,
+client::client(const boost::asio::ip::tcp::endpoint& server,
            const std::filesystem::path& cert,
            const std::filesystem::path key,
            const std::filesystem::path ca)
-    : m_io(io)
-    , m_ssl(boost::asio::ssl::context::sslv23_client)
+    : m_ssl(boost::asio::ssl::context::sslv23_client)
     , m_server(server)
 {
     m_ssl.set_options(
@@ -32,19 +30,19 @@ client::client(boost::asio::io_context& io,
 
 client::~client()
 {
-    if (m_socket->lowest_layer().is_open())
-    {
-        boost::system::error_code ec;
-        m_socket->lowest_layer().shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
-        m_socket->lowest_layer().close(ec);
-    }
+    if (!m_socket || !m_socket->lowest_layer().is_open())
+        return;
+
+    boost::system::error_code ec;
+    m_socket->lowest_layer().shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
+    m_socket->lowest_layer().close(ec);
 }
 
 void client::connect(boost::asio::yield_context yield)
 {
-    m_socket = std::make_unique<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>(m_io, m_ssl);
+    m_socket = std::make_unique<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>(yield.get_executor(), m_ssl);
 
-    execute([this, yield]()
+    execute(yield, [this, yield]()
     {
         m_socket->lowest_layer().open(m_server.protocol());
         m_socket->lowest_layer().async_connect(m_server, yield);
@@ -57,12 +55,13 @@ void client::shutdown(boost::asio::yield_context yield)
     if (!m_socket || !m_socket->lowest_layer().is_open())
         return;
 
-    execute([this, yield]()
+    execute(yield, [this, yield]()
     {
         boost::system::error_code ec;
         m_socket->async_shutdown(yield[ec]);
         m_socket->lowest_layer().shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
         m_socket->lowest_layer().close(ec);
+        m_socket.reset();
     },
     2000);
 }
@@ -72,7 +71,7 @@ void client::write_query(boost::asio::yield_context yield, const query& req)
     if (!m_socket || !m_socket->lowest_layer().is_open())
         throw boost::system::system_error(boost::asio::error::not_connected, "not connected to server");
 
-    execute([this, req, yield]() mutable
+    execute(yield, [this, req, yield]() mutable
     {
         auto size = boost::asio::async_write(*m_socket, boost::asio::buffer(req.data(), req.size()), yield);
 
@@ -86,7 +85,7 @@ void client::read_reply(boost::asio::yield_context yield, reply& res)
     if (!m_socket || !m_socket->lowest_layer().is_open())
         throw boost::system::system_error(boost::asio::error::not_connected, "not connected to server");
 
-    execute([this, &res, yield]() mutable
+    execute(yield, [this, &res, yield]() mutable
     {
         try
         {
@@ -113,9 +112,9 @@ void client::read_reply(boost::asio::yield_context yield, reply& res)
     });
 }
 
-void client::execute(const std::function<void()>& function, int timeout)
+void client::execute(boost::asio::yield_context yield, const std::function<void()>& function, int timeout)
 {
-    boost::asio::deadline_timer timer(m_io);
+    boost::asio::deadline_timer timer(yield.get_executor());
 
     timer.expires_from_now(boost::posix_time::milliseconds(timeout));
     timer.async_wait([&](const boost::system::error_code& ec)
@@ -123,7 +122,7 @@ void client::execute(const std::function<void()>& function, int timeout)
         if (ec == boost::asio::error::operation_aborted)
             return;
 
-        if (m_socket->lowest_layer().is_open())
+        if (m_socket && m_socket->lowest_layer().is_open())
         {
             boost::system::error_code err;
             m_socket->lowest_layer().cancel(err);

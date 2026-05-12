@@ -13,12 +13,11 @@ struct agent
 {
     virtual ~agent() {}
     virtual void assign_relay(boost::asio::yield_context yield, protocol proto, endpoint& relay) = 0;
-    virtual void deploy_relay(boost::asio::yield_context yield, const peer& red, const peer& blue) = 0;
+    virtual void launch_relay(boost::asio::yield_context yield, const peer& red, const peer& blue) = 0;
 };
 
-std::shared_ptr<agent> create_agent(boost::asio::io_context& io,
-               const boost::asio::ip::tcp::endpoint& server,
-               const std::filesystem::path& cert,
-               const std::filesystem::path& key,
-               const std::filesystem::path& ca);
+std::shared_ptr<agent> create_agent(const boost::asio::ip::tcp::endpoint& server,
+                                    const std::filesystem::path& cert,
+                                    const std::filesystem::path& key,
+                                    const std::filesystem::path& ca);
 } // namespace ricochet

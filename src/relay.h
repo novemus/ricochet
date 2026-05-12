@@ -30,11 +30,12 @@ class tcp_relay : public relay, public std::enable_shared_from_this<tcp_relay>
     boost::asio::ip::tcp::acceptor m_server;
     boost::asio::ip::tcp::socket m_near;
     boost::asio::ip::tcp::socket m_away;
-    boost::asio::deadline_timer m_timer;
+    boost::asio::deadline_timer m_idle_timer;
+    boost::asio::deadline_timer m_retry_timer;
     boost::posix_time::seconds m_idle;
     cleanup_function m_clean;
-
     std::chrono::steady_clock::time_point m_timestamp;
+    int m_reconnects;
 
 public:
 

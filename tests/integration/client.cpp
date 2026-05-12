@@ -155,8 +155,6 @@ BOOST_AUTO_TEST_CASE(multiple_client_sessions)
             { create_client(false), ricochet::protocol::tcp6 } 
         };
 
-        auto address = ricochet::get_outgoing_address(get_io_context(), true);
-
         for (auto [client, proto] : pool) 
         {
             client->connect(yield);
@@ -181,6 +179,8 @@ BOOST_AUTO_TEST_CASE(multiple_client_sessions)
 
                 BOOST_CHECK(!endpoint.address().is_loopback() && !endpoint.address().is_unspecified());
                 BOOST_CHECK(endpoint.port() > 0);
+
+                auto address = ricochet::get_outgoing_address(get_io_context(), true);
 
                 ricochet::peer red(address, 0, ricochet::schema::client);
                 ricochet::peer blue(address, 0, ricochet::schema::client);

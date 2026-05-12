@@ -26,7 +26,7 @@ BOOST_AUTO_TEST_CASE(udp4_relay)
             ricochet::peer red(address, 0, ricochet::schema::client);
             ricochet::peer blue(address, 7788, ricochet::schema::server);
 
-            BOOST_REQUIRE_NO_THROW(agent->deploy_relay(yield, red, blue));
+            BOOST_REQUIRE_NO_THROW(agent->launch_relay(yield, red, blue));
         }
         catch (const ricochet::unavailable_proto&)
         {
@@ -63,7 +63,7 @@ BOOST_AUTO_TEST_CASE(tcp4_relay)
             ricochet::peer red(address, 0, ricochet::schema::client);
             ricochet::peer blue(address, 8899, ricochet::schema::server);
 
-            BOOST_REQUIRE_NO_THROW(agent->deploy_relay(yield, red, blue));
+            BOOST_REQUIRE_NO_THROW(agent->launch_relay(yield, red, blue));
         }
         catch (const ricochet::unavailable_proto&)
         {
@@ -102,7 +102,7 @@ BOOST_AUTO_TEST_CASE(reuse_agent)
                 ricochet::peer red(address, 0, ricochet::schema::client);
                 ricochet::peer blue(address, 0, ricochet::schema::client);
 
-                BOOST_REQUIRE_NO_THROW(agent->deploy_relay(yield, red, blue));
+                BOOST_REQUIRE_NO_THROW(agent->launch_relay(yield, red, blue));
             }
         }
         catch (const ricochet::unavailable_proto&)

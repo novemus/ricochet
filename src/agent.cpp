@@ -39,12 +39,10 @@ class relay_agent : public agent
 
 public:
 
-    relay_agent(boost::asio::io_context& io,
-           const boost::asio::ip::tcp::endpoint& server,
-           const std::filesystem::path& cert,
-           const std::filesystem::path& key,
-           const std::filesystem::path& ca)
-        : m_client(io, server, cert, key, ca)
+    relay_agent(const boost::asio::ip::tcp::endpoint& server,
+                const std::filesystem::path& cert,
+                const std::filesystem::path& key,
+                const std::filesystem::path& ca) : m_client(server, cert, key, ca)
     {
     }
 
@@ -54,20 +52,19 @@ public:
         relay = perform_request<endpoint>(yield, query::make_provide_query(proto));
     }
 
-    void deploy_relay(boost::asio::yield_context yield, const peer& red, const peer& blue) override
+    void launch_relay(boost::asio::yield_context yield, const peer& red, const peer& blue) override
     {
         perform_request<bool>(yield, query::make_connect_query(red, blue));
         m_client.shutdown(yield);
     }
 };
 
-std::shared_ptr<agent> create_agent(boost::asio::io_context& io,
-           const boost::asio::ip::tcp::endpoint& server,
-           const std::filesystem::path& cert,
-           const std::filesystem::path& key,
-           const std::filesystem::path& ca)
+std::shared_ptr<agent> create_agent(const boost::asio::ip::tcp::endpoint& server,
+                                    const std::filesystem::path& cert,
+                                    const std::filesystem::path& key,
+                                    const std::filesystem::path& ca)
 {
-    return std::make_shared<relay_agent>(io, server, cert, key, ca);
+    return std::make_shared<relay_agent>(server, cert, key, ca);
 }
 
 } // namespace ricochet

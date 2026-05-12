@@ -90,10 +90,12 @@ tcp_relay::tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_t
     , m_server(io)
     , m_near(io)
     , m_away(io)
-    , m_timer(io)
+    , m_idle_timer(io)
+    , m_retry_timer(io)
     , m_idle(idle)
     , m_clean(clean)
     , m_timestamp(std::chrono::steady_clock::now())
+    , m_reconnects(0)
 {
     auto protocol = proto == protocol::tcp6 ? boost::asio::ip::tcp::v6() : boost::asio::ip::tcp::v4();
 
@@ -173,8 +175,8 @@ void tcp_relay::start_relay()
 
 void tcp_relay::watch_activity()
 {
-    m_timer.expires_from_now(m_idle);
-    m_timer.async_wait(m_strand.wrap([this, weak = weak_from_this()](const boost::system::error_code& ec)
+    m_idle_timer.expires_from_now(m_idle);
+    m_idle_timer.async_wait(m_strand.wrap([this, weak = weak_from_this()](const boost::system::error_code& ec)
     {
         auto self = weak.lock();
         if (!self)
@@ -204,13 +206,24 @@ void tcp_relay::connect_peer(const endpoint& which)
     auto endpoint = m_server.local_endpoint();
 
     auto peer = std::make_shared<boost::asio::ip::tcp::socket>(m_io);
-    peer->open(endpoint.protocol());
-    peer->set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
+
+    try
+    {
+        peer->open(endpoint.protocol());
+        peer->set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
 #ifdef __APPLE__
-    int optval = 1;
-    ::setsockopt(peer->native_handle(), SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+        int optval = 1;
+        ::setsockopt(peer->native_handle(), SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
 #endif
-    peer->bind(endpoint);
+        peer->bind(endpoint);
+    }
+    catch (const std::exception& e)
+    {
+        _err_ << "TCP relay " << this << " failed to bind: " << e.what();
+
+        break_relay();
+        return;
+    }
 
     peer->async_connect(boost::asio::ip::tcp::endpoint(which.address(), which.port()),
         m_strand.wrap([this, weak = weak_from_this(), peer, which](const boost::system::error_code& ec)
@@ -230,10 +243,25 @@ void tcp_relay::connect_peer(const endpoint& which)
 
                 start_relay();
             }
+            else if (ec == boost::asio::error::connection_refused && m_reconnects < 3)
+            {
+                m_reconnects++;
+                _wrn_ << "TCP relay " << this << " connection refused to peer " << which.address() << ":" << which.port() << ", retrying in 2 seconds";
+
+                m_retry_timer.expires_from_now(boost::posix_time::seconds(2));
+                m_retry_timer.async_wait(m_strand.wrap([this, weak = weak_from_this(), which](const boost::system::error_code& ec)
+                {
+                    auto self = weak.lock();
+                    if (!self)
+                        return;
+
+                    if (!ec)
+                        connect_peer(which);
+                }));
+            }
             else
             {
-                _wrn_ << "TCP relay " << this << " failed to connect to peer " << which.address() << ":" << which.port()
-                      << ": " << ec.message();
+                _wrn_ << "TCP relay " << this << " failed to connect to peer " << which.address() << ":" << which.port() << ": " << ec.message();
                 break_relay();
             }
         }));
@@ -332,7 +360,8 @@ void tcp_relay::break_relay()
     m_near.close(ec);
     m_away.close(ec);
 
-    m_timer.cancel(ec);
+    m_idle_timer.cancel(ec);
+    m_retry_timer.cancel(ec);
 
     if (m_clean)
     {
