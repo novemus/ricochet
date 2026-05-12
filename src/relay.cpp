@@ -4,10 +4,10 @@
 #endif
 #include <memory>
 #include <chrono>
-#include <iostream>
 #include <cstdlib>
 #include "proto.h"
 #include "relay.h"
+#include "logging.h"
 
 namespace ricochet {
 
@@ -42,7 +42,7 @@ boost::asio::ip::address get_outgoing_address(boost::asio::io_context& io, bool 
         }
         catch (const std::exception& e)
         {
-            std::cerr << "Warning: " << e.what() << std::endl;
+            _wrn_ << "Warning: " << e.what();
             remote = boost::asio::ip::udp::endpoint(boost::asio::ip::make_address(ip4 ? "8.8.8.8" : "2001:4860:4860::8888"), 53);
         }
 
@@ -53,7 +53,7 @@ boost::asio::ip::address get_outgoing_address(boost::asio::io_context& io, bool 
     }
     catch (const boost::system::system_error& ex)
     {
-        std::cerr << "Error: " << ex.what() << std::endl;
+        _err_ << "Error: " << ex.what();
     }
 
     throw unavailable_proto("Failed to determine outgoing address");
@@ -105,10 +105,13 @@ tcp_relay::tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_t
 #endif
     m_server.bind(boost::asio::ip::tcp::endpoint(protocol, 0));
     m_server.listen();
+
+    _dbg_ << "TCP relay " << this << " created (" << (proto == protocol::tcp6 ? "tcp6" : "tcp4") << ")";
 }
 
 tcp_relay::~tcp_relay()
 {
+    _dbg_ << "TCP relay " << this << " destroyed";
     break_relay();
 }
 
@@ -125,29 +128,26 @@ endpoint tcp_relay::get_endpoint() const
 
 void tcp_relay::start(const peer& red, const peer& blue)
 {
+    _inf_ << "TCP relay " << this << " starting (red=" << (red.role() == schema::client ? "client" : "server") 
+          << ", blue=" << (blue.role() == schema::client ? "client" : "server") << ")";
+
     if (red.role() == schema::client)
-    {
         accept_peer(red.location());
-    }
     else
-    {
         connect_peer(red.location());
-    }
     
     if (blue.role() == schema::client)
-    {
         accept_peer(blue.location());
-    }
     else
-    {
         connect_peer(blue.location());
-    }
 
     watch_activity();
 }
 
 void tcp_relay::close()
 {
+    _inf_ << "TCP relay " << this << " closing";
+    
     m_strand.post([weak = weak_from_this()]()
     {
         if (auto self = weak.lock())
@@ -161,6 +161,8 @@ void tcp_relay::start_relay()
 {
     if (m_near.is_open() && m_away.is_open())
     {
+        _inf_ << "TCP relay " << this << " active";
+
         boost::system::error_code ec;
         m_server.close(ec);
 
@@ -186,6 +188,7 @@ void tcp_relay::watch_activity()
 
             if (expired.count() >= m_idle.total_seconds())
             {
+                _inf_ << "TCP relay " << this << " idle timeout";
                 break_relay();
             }
             else
@@ -210,7 +213,7 @@ void tcp_relay::connect_peer(const endpoint& which)
     peer->bind(endpoint);
 
     peer->async_connect(boost::asio::ip::tcp::endpoint(which.address(), which.port()),
-        m_strand.wrap([this, weak = weak_from_this(), peer](const boost::system::error_code& ec)
+        m_strand.wrap([this, weak = weak_from_this(), peer, which](const boost::system::error_code& ec)
         {
             auto self = weak.lock();
             if (!self)
@@ -218,6 +221,8 @@ void tcp_relay::connect_peer(const endpoint& which)
 
             if (!ec)
             {
+                _dbg_ << "TCP relay " << this << " connected to peer " << which.address() << ":" << which.port();
+                
                 if (m_near.is_open())
                     m_away = std::move(*peer);
                 else
@@ -227,6 +232,8 @@ void tcp_relay::connect_peer(const endpoint& which)
             }
             else
             {
+                _wrn_ << "TCP relay " << this << " failed to connect to peer " << which.address() << ":" << which.port()
+                      << ": " << ec.message();
                 break_relay();
             }
         }));
@@ -250,6 +257,8 @@ void tcp_relay::accept_peer(const endpoint& which)
 
             if (address_matches && port_matches)
             {
+                _dbg_ << "TCP relay " << this << " accepted peer " << endpoint.address() << ":" << endpoint.port();
+
                 if (m_near.is_open())
                     m_away = std::move(*peer);
                 else
@@ -259,6 +268,8 @@ void tcp_relay::accept_peer(const endpoint& which)
             }
             else
             {
+                _wrn_ << "TCP relay " << this << " rejected wrong peer " << endpoint.address() << ":" << endpoint.port();
+
                 boost::system::error_code ec;
                 peer->shutdown(boost::asio::socket_base::shutdown_type::shutdown_both, ec);
                 accept_peer(which);
@@ -266,6 +277,7 @@ void tcp_relay::accept_peer(const endpoint& which)
         }
         else
         {
+            _dbg_ << "TCP relay " << this << " accept error, breaking relay: " << ec.message();
             break_relay();
         }
     }));
@@ -299,12 +311,14 @@ void tcp_relay::transmit_data(boost::asio::ip::tcp::socket& from, boost::asio::i
                         }
                         else
                         {
+                            _dbg_ << "TCP relay " << this << " socket not open, breaking relay: " << ec.message();
                             break_relay();
                         }
                     });
             }
             else
             {
+                _dbg_ << "TCP relay " << this << " other socket not open, breaking relay";
                 break_relay();
             }
         }));
@@ -337,10 +351,13 @@ udp_relay::udp_relay(boost::asio::io_context& io, protocol proto, boost::posix_t
 {
     m_socket.set_option(boost::asio::socket_base::reuse_address(true));
     m_socket.bind(boost::asio::ip::udp::endpoint(proto == protocol::udp6 ? boost::asio::ip::udp::v6() : boost::asio::ip::udp::v4(), 0));
+    
+    _dbg_ << "UDP relay " << this << " created (" << (proto == protocol::udp6 ? "udp6" : "udp4") << ")";
 }
 
 udp_relay::~udp_relay()
 {
+    _dbg_ << "UDP relay " << this << " destroyed";
     break_relay();
 }
 
@@ -357,20 +374,35 @@ endpoint udp_relay::get_endpoint() const
 
 void udp_relay::start(const peer& red, const peer& blue)
 {
+    _inf_ << "UDP relay " << this << " starting (red=" << (red.role() == schema::client ? "client" : "server") 
+          << ", blue=" << (blue.role() == schema::client ? "client" : "server") << ")";
+    
     if (red.role() == schema::server)
     {
         if (m_near.address().is_unspecified() || m_near.port() == 0)
+        {
+            _dbg_ << "UDP relay " << this << " assigned red server " << red.location().address() << ":" << red.location().port() << " as near peer";
             m_near = boost::asio::ip::udp::endpoint(red.location().address(), red.location().port());
+        }
         else
+        {
+            _dbg_ << "UDP relay " << this << " assigned red server " << red.location().address() << ":" << red.location().port() << " as away peer";
             m_away = boost::asio::ip::udp::endpoint(red.location().address(), red.location().port());
+        }
     }
 
     if (blue.role() == schema::server)
     {
         if (m_near.address().is_unspecified() || m_near.port() == 0)
+        {
+            _dbg_ << "UDP relay " << this << " assigned blue server " << blue.location().address() << ":" << blue.location().port() << " as near peer";
             m_near = boost::asio::ip::udp::endpoint(blue.location().address(), blue.location().port());
+        }
         else
+        {
+            _dbg_ << "UDP relay " << this << " assigned blue server " << blue.location().address() << ":" << blue.location().port() << " as away peer";
             m_away = boost::asio::ip::udp::endpoint(blue.location().address(), blue.location().port());
+        }
     }
 
     read_socket();
@@ -379,6 +411,8 @@ void udp_relay::start(const peer& red, const peer& blue)
 
 void udp_relay::close()
 {
+    _inf_ << "UDP relay " << this << " closing";
+    
     m_strand.post([weak = weak_from_this()]()
     {
         if (auto self = weak.lock())
@@ -405,6 +439,7 @@ void udp_relay::watch_activity()
 
             if (expired.count() >= m_idle.total_seconds())
             {
+                _inf_ << "UDP relay " << this << " idle timeout, breaking relay";
                 break_relay();
             }
             else
@@ -443,13 +478,19 @@ void udp_relay::read_socket()
 
                     if (near_address_matches && near_port_matches)
                     {
+                        _dbg_ << "UDP relay " << this << " connected near peer " << peer->address() << ":" << peer->port();
                         m_timestamp = std::chrono::steady_clock::now();
                         m_near = *peer;
                     }
                     else if (away_address_matches && away_port_matches)
                     {
+                        _dbg_ << "UDP relay " << this << " connected away peer " << peer->address() << ":" << peer->port();
                         m_timestamp = std::chrono::steady_clock::now();
                         m_away = *peer;
+                    }
+                    else
+                    {
+                        _wrn_ << "UDP relay " << this << " rejected wrong peer " << peer->address() << ":" << peer->port();
                     }
                 }
 
@@ -464,7 +505,10 @@ void udp_relay::read_socket()
                             return;
 
                         if (ec)
+                        {
+                            _dbg_ << "TCP relay " << this << " send error, breaking relay: " << ec.message();
                             break_relay();
+                        }
                     }));
                 }
 
@@ -472,6 +516,7 @@ void udp_relay::read_socket()
             }
             else
             {
+                _dbg_ << "UDP relay " << this << " cannot transmit, breaking relay: " << ec.message();
                 break_relay();
             }
         }));

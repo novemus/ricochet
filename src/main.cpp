@@ -7,6 +7,7 @@
 #include <vector>
 #include <thread>
 #include "server.h"
+#include "logging.h"
 
 namespace po = boost::program_options;
 
@@ -26,7 +27,8 @@ int main(int argc, char* argv[])
             ("idle", po::value<int>()->default_value(300), "idle session timeout in seconds")
             ("client-limit", po::value<size_t>()->default_value(10), "maximum sessions per client")
             ("total-limit", po::value<size_t>()->default_value(1000), "maximum total sessions")
-            ("verbose", "enable verbose logging")
+            ("log-level", po::value<std::string>()->default_value("info"), "logging level (debug, info, warning, error, fatal)")
+            ("log-file", po::value<std::filesystem::path>(), "log file path (optional)")
         ;
 
         po::variables_map vm;
@@ -41,19 +43,19 @@ int main(int argc, char* argv[])
 
         if (vm["idle"].as<int>() <= 0)
         {
-            std::cerr << "Error: idle timeout must be positive\n";
+            _err_ << "Error: idle timeout must be positive";
             return 1;
         }
 
         if (vm["client-limit"].as<size_t>() == 0)
         {
-            std::cerr << "Error: client limit must be positive\n";
+            _err_ << "Error: client limit must be positive";
             return 1;
         }
 
         if (vm["total-limit"].as<size_t>() == 0)
         {
-            std::cerr << "Error: total limit must be positive\n";
+            _err_ << "Error: total limit must be positive";
             return 1;
         }
 
@@ -68,24 +70,39 @@ int main(int argc, char* argv[])
         config.idle_timeout = boost::posix_time::seconds(vm["idle"].as<int>());
         config.client_relay_limit = vm["client-limit"].as<size_t>();
         config.total_relay_limit = vm["total-limit"].as<size_t>();
+        config.log_level = vm["log-level"].as<std::string>();
+        
+        if (vm.count("log-file"))
+        {
+            config.log_file = vm["log-file"].as<std::filesystem::path>();
+        }
 
         boost::asio::io_context io;
         ricochet::server server(io, config);
 
         unsigned int thread_count = std::max(4u, std::thread::hardware_concurrency());
 
-        if (vm.count("verbose"))
+        // Initialize logging
+        boost::log::trivial::severity_level log_level = ricochet::logging::parse_log_level(vm["log-level"].as<std::string>());
+        
+        // Initialize console logging
+        ricochet::logging::init_console_logging(log_level);
+        
+        // Initialize file logging if specified
+        if (vm.count("log-file"))
         {
-            std::cout << "Starting Ricochet relay server on " 
-                      << config.server_endpoint.address() << ":" << config.server_endpoint.port() << "\n";
-            std::cout << "SSL certificate: " << config.server_cert << "\n";
-            std::cout << "SSL private key: " << config.server_key << "\n";
-            std::cout << "Client repository: " << config.client_repo << "\n";
-            std::cout << "Idle timeout: " << config.idle_timeout.total_seconds() << " seconds\n";
-            std::cout << "Max sessions per client: " << config.client_relay_limit << "\n";
-            std::cout << "Max total sessions: " << config.total_relay_limit << "\n";
-            std::cout << "Using " << thread_count << " worker threads\n";
+            ricochet::logging::init_file_logging(vm["log-file"].as<std::filesystem::path>().string(), log_level);
         }
+
+        _inf_ << "Starting Ricochet relay server on " 
+              << config.server_endpoint.address() << ":" << config.server_endpoint.port();
+        _inf_ << "SSL certificate: " << config.server_cert;
+        _inf_ << "SSL private key: " << config.server_key;
+        _inf_ << "Client repository: " << config.client_repo;
+        _inf_ << "Idle timeout: " << config.idle_timeout.total_seconds() << " seconds";
+        _inf_ << "Max sessions per client: " << config.client_relay_limit;
+        _inf_ << "Max total sessions: " << config.total_relay_limit;
+        _inf_ << "Using " << thread_count << " worker threads";
 
         server.accept();
 
@@ -100,7 +117,7 @@ int main(int argc, char* argv[])
                 }
                 catch (const std::exception& e)
                 {
-                    std::cerr << "Worker thread error: " << e.what() << std::endl;
+                    _err_ << "Worker thread error: " << e.what();
                 }
             });
         }
@@ -111,7 +128,7 @@ int main(int argc, char* argv[])
         }
         catch (const std::exception& e)
         {
-            std::cerr << "Main thread error: " << e.what() << std::endl;
+            _err_ << "Main thread error: " << e.what();
         }
 
         for (auto& worker : workers)
@@ -122,7 +139,7 @@ int main(int argc, char* argv[])
     }
     catch (const std::exception& e)
     {
-        std::cerr << "Error: " << e.what() << std::endl;
+        _err_ << "Error: " << e.what();
         return 1;
     }
 

@@ -7,6 +7,7 @@
 #include "server.h"
 #include "session.h"
 #include "repo.h"
+#include "logging.h"
 
 namespace ricochet {
 
@@ -17,9 +18,7 @@ server::server(boost::asio::io_context& io, const config& conf)
     , m_ssl(std::make_shared<boost::asio::ssl::context>(boost::asio::ssl::context::sslv23_server))
     , m_server(io)
 {
-    m_ssl->set_options(
-        boost::asio::ssl::context::default_workarounds | boost::asio::ssl::context::single_dh_use
-    );
+    m_ssl->set_options(boost::asio::ssl::context::default_workarounds | boost::asio::ssl::context::single_dh_use);
 
     m_ssl->use_certificate_chain_file(m_config.server_cert);
     m_ssl->use_private_key_file(m_config.server_key, boost::asio::ssl::context::pem);
@@ -46,11 +45,14 @@ void server::accept()
     m_server.bind(m_config.server_endpoint);
     m_server.listen();
 
+    _inf_ << "Server listening on " << m_config.server_endpoint.address() << ":" << m_config.server_endpoint.port();
     do_accept();
 }
 
 void server::stop()
 {
+    _inf_ << "Stopping server...";
+
     boost::system::error_code ec;
     m_server.close(ec);
 
@@ -62,6 +64,7 @@ void server::stop()
             session->close();
         }
     }
+
     m_relays.clear();
 }
 
@@ -76,6 +79,7 @@ void server::do_accept()
 
         if (!ec)
         {
+            _dbg_ << "New connection accepted from " << socket->lowest_layer().remote_endpoint();
             socket->async_handshake(boost::asio::ssl::stream_base::server, [this, weak, socket](const boost::system::error_code& ec)
             {
                 auto self = weak.lock();
@@ -84,6 +88,8 @@ void server::do_accept()
 
                 if (!ec)
                 {
+                    _dbg_ << "SSL handshake successful for " << socket->lowest_layer().remote_endpoint();
+
                     try
                     {
                         X509Ptr cert(SSL_get_peer_certificate(socket->native_handle()));
@@ -92,10 +98,10 @@ void server::do_accept()
 
                         std::string hash = m_repo.get_certificate_hash(cert.get());
                         auto relay = std::make_shared<session>(m_io, m_ssl, std::move(*socket), m_config.idle_timeout);
-
                         std::lock_guard<std::mutex> lock(m_mutex);
                         if (!check_limits(hash))
                         {
+                            _wrn_ << "Connection limits reached for client " << hash.substr(0, 16) << "...";
                             relay->error(ricochet::failure::limit_reached);
                         }
                         else
@@ -108,27 +114,33 @@ void server::do_accept()
                                     m_relays[hash].erase(relay);
                                     if (m_relays[hash].empty())
                                         m_relays.erase(hash);
+                                    _dbg_ << "Session closed for client " << hash.substr(0, 16) << "..., active sessions: " << m_relays.size();
                                 }
                             });
+
+                            m_relays[hash].insert(relay);
+
+                            _inf_ << "New session started for client " << hash.substr(0, 16) << "..., total sessions: " << m_relays[hash].size();
                             relay->start();
                         }
-                        m_relays[hash].insert(relay);
                     }
                     catch (const std::exception& e)
                     {
-                        boost::system::error_code close_ec;
-                        socket->lowest_layer().close(close_ec);
+                        _wrn_ << "Error processing connection: " << e.what();
                     }
                 }
                 else
                 {
-                    boost::system::error_code close_ec;
-                    socket->lowest_layer().close(close_ec);
+                    _wrn_ << "SSL handshake failed: " << ec.message();
                 }
+                do_accept();
             });
         }
-
-        do_accept();
+        else
+        {
+            _wrn_ << "Accept failed: " << ec.message();
+            do_accept();
+        }
     });
 }
 
@@ -143,7 +155,6 @@ bool server::check_limits(const std::string& client)
         {
             if (client == hash)
                 ++client_sessions;
-
             ++total_sessions;
             ++it;
         }

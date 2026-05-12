@@ -22,6 +22,8 @@ struct config
     boost::posix_time::seconds idle_timeout;
     size_t client_relay_limit;
     size_t total_relay_limit;
+    std::string log_level;
+    std::filesystem::path log_file;
 
     config() 
         : server_endpoint()
@@ -32,6 +34,8 @@ struct config
         , idle_timeout(boost::posix_time::seconds(300))
         , client_relay_limit(100)
         , total_relay_limit(1000)
+        , log_level("info")
+        , log_file("")
     {}
 };
 

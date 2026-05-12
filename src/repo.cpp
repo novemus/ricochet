@@ -3,6 +3,7 @@
 #include <iomanip>
 #include <iostream>
 #include "repo.h"
+#include "logging.h"
 
 namespace ricochet {
 
@@ -114,7 +115,7 @@ void repository::update_cache_incremental() const
             }
             catch (const std::exception& e)
             {
-                std::cerr << "Error loading certificate " << file << ": " << e.what() << std::endl;
+                _wrn_ << "Error loading certificate " << file << ": " << e.what();
                 continue;
             }
         }

@@ -1,10 +1,11 @@
 #include <boost/bind.hpp>
 #include "session.h"
+#include "logging.h"
 
 namespace ricochet {
 
 session::session(boost::asio::io_context& io,
-                std::shared_ptr<boost::asio::ssl::context> ssl,
+                 std::shared_ptr<boost::asio::ssl::context> ssl,
                  boost::asio::ssl::stream<boost::asio::ip::tcp::socket> socket,
                  boost::posix_time::seconds idle)
     : m_io(io)
@@ -15,10 +16,12 @@ session::session(boost::asio::io_context& io,
     , m_idle(idle)
     , m_query(4096)
 {
+    _dbg_ << "Session " << this << " created (" << idle.total_seconds() << "s idle)";
 }
 
 session::~session()
 {
+    _dbg_ << "Session " << this << " destroyed";
     do_close();
 }
 
@@ -35,11 +38,13 @@ void session::set_cleaner(cleanup_function clean)
 
 void session::start()
 {
+    _inf_ << "Session " << this << " started";
     do_read_header();
 }
 
 void session::close()
 {
+    _inf_ << "Session " << this << " closing";
     m_strand.post([weak = weak_from_this()]()
     {
         if (auto self = weak.lock())
@@ -51,6 +56,7 @@ void session::close()
 
 void session::error(ricochet::failure error)
 {
+    _wrn_ << "Session " << this << " error: " << static_cast<int>(error);
     m_strand.post([weak = weak_from_this(), error]()
     {
         if (auto self = weak.lock())
@@ -94,6 +100,8 @@ void session::do_shutdown()
             auto self = weak.lock();
             if (!self)
                 return;
+
+            _dbg_ << "Session " << this << " shutdown finalize";
 
             boost::system::error_code ec;
             m_socket.lowest_layer().shutdown(boost::asio::socket_base::shutdown_type::shutdown_both, ec);
@@ -157,6 +165,7 @@ void session::do_read_header()
             }
             else
             {
+                _wrn_ << "Session " << this << " read error, closing: " << ec.message();
                 do_close();
             }
         }));
@@ -189,6 +198,7 @@ void session::do_read_payload()
             }
             else
             {
+                _wrn_ << "Session " << this << " payload read error, closing: " << ec.message();
                 do_close();
             }
         }));
@@ -207,20 +217,24 @@ void session::handle_query()
                 handle_connect_query();
                 break;
             default:
+                _wrn_ << "Session " << this << " unknown query type " << static_cast<int>(m_query.type());
                 send_error_reply(ricochet::failure::malformed_message);
                 break;
         }
     }
     catch (const malformed_message& e)
     {
+        _wrn_ << "Session " << this << " malformed message: " << e.what();
         send_error_reply(ricochet::failure::malformed_message);
     }
     catch (const unavailable_proto& e)
     {
+        _wrn_ << "Session " << this << " unavailable protocol: " << e.what();
         send_error_reply(ricochet::failure::unavailable_proto);
     }
     catch (const std::exception& e)
     {
+        _err_ << "Session " << this << " server error: " << e.what();
         send_error_reply(ricochet::failure::server_error);
     }
 }
@@ -237,6 +251,7 @@ void session::do_write(const ricochet::reply& msg)
 
             if (ec)
             {
+                _wrn_ << "Session " << this << " write error, closing: " << ec.message();
                 do_close();
             }
             else if (msg.type() == ricochet::reply::kind::binding)
@@ -257,6 +272,8 @@ void session::do_write(const ricochet::reply& msg)
 void session::handle_provide_query()
 {
     auto proto = std::get<ricochet::protocol>(m_query.payload());
+    _inf_ << "Session " << this << " creating relay for protocol " << static_cast<int>(proto);
+    
     switch (proto)
     {
         case ricochet::protocol::tcp4:
@@ -278,6 +295,7 @@ void session::handle_provide_query()
 void session::handle_connect_query()
 {
     auto payload = std::get<ricochet::couple>(m_query.payload());
+    _inf_ << "Session " << this << " handling connect query";
 
     if (m_relay)
     {
@@ -286,18 +304,21 @@ void session::handle_connect_query()
         
         if (red.role() == ricochet::schema::server && (red.location().address().is_unspecified() || red.location().port() == 0))
         {
+            _wrn_ << "Session " << this << " invalid red server location";
             send_error_reply(ricochet::failure::malformed_message);
             return;
         }
         
         if (blue.role() == ricochet::schema::server && (blue.location().address().is_unspecified() || blue.location().port() == 0))
         {
+            _wrn_ << "Session " << this << " invalid blue server location";
             send_error_reply(ricochet::failure::malformed_message);
             return;
         }
         
         if (red.role() == ricochet::schema::server && blue.role() == ricochet::schema::server)
         {
+            _wrn_ << "Session " << this << " both peers are servers";
             send_error_reply(ricochet::failure::malformed_message);
             return;
         }
@@ -314,6 +335,7 @@ void session::handle_connect_query()
         
         if (!protocol_matches)
         {
+            _wrn_ << "Session " << this << " protocol mismatch";
             send_error_reply(ricochet::failure::malformed_message);
             return;
         }
@@ -324,6 +346,7 @@ void session::handle_connect_query()
     }
     else
     {
+        _wrn_ << "Session " << this << " no relay available for connect";
         send_error_reply(ricochet::failure::server_error);
     }
 }
@@ -344,6 +367,7 @@ void session::start_timer()
 
         if (!ec)
         {
+            _inf_ << "Session " << this << " idle timeout, closing";
             do_close();
         }
     }));
