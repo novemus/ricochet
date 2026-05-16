@@ -180,7 +180,7 @@ BOOST_AUTO_TEST_CASE(multiple_client_sessions)
                 BOOST_CHECK(!endpoint.address().is_loopback() && !endpoint.address().is_unspecified());
                 BOOST_CHECK(endpoint.port() > 0);
 
-                auto address = ricochet::get_outgoing_address(get_io_context(), true);
+                auto address = ricochet::get_outgoing_address(get_io_context(), proto == ricochet::protocol::udp4 || proto == ricochet::protocol::tcp4);
 
                 ricochet::peer red(address, 0, ricochet::schema::client);
                 ricochet::peer blue(address, 0, ricochet::schema::client);

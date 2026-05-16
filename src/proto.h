@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/asio.hpp>
+#include <limits>
 #include <vector>
 #include <variant>
 #include <cstdint>
@@ -69,6 +70,7 @@ struct buffer
     std::size_t size() const { return m_data.size(); }
     uint8_t* data() { return m_data.data(); }
     const uint8_t* data() const { return m_data.data(); }
+    std::string dump(size_t pos = 0, size_t size = std::numeric_limits<size_t>::max()) const;
 
 protected:
 
@@ -108,7 +110,7 @@ struct couple : public buffer
 
 struct query : public buffer
 {
-    static constexpr size_t header_size = 5;
+    static constexpr size_t header_size = 3;
 
     enum class kind : uint8_t
     {
@@ -119,7 +121,7 @@ struct query : public buffer
     using value = std::variant<protocol, couple>;
 
     kind type() const;
-    uint32_t length() const;
+    uint16_t length() const;
     value payload() const;
 
     query() = default;
@@ -132,7 +134,7 @@ struct query : public buffer
 
 struct reply : public buffer
 {
-    static constexpr size_t header_size = 5;
+    static constexpr size_t header_size = 3;
 
     enum class kind : uint8_t
     {
@@ -144,7 +146,7 @@ struct reply : public buffer
     using value = std::variant<endpoint, failure, bool>;
 
     kind type() const;
-    uint32_t length() const;
+    uint16_t length() const;
     value payload() const;
 
     reply() = default;
@@ -209,6 +211,21 @@ inline std::ostream& operator<<(std::ostream& os, const failure& fail)
         case failure::limit_reached: return os << "limit_reached";
         default: return os << "unknown";
     }
+}
+
+inline std::ostream& operator<<(std::ostream& os, const endpoint& val)
+{
+    return os << (val.address().is_v6() ? "[" : "") << val.address() << (val.address().is_v6() ? "]" : "") << ":" << val.port();
+}
+
+inline std::ostream& operator<<(std::ostream& os, const peer& val)
+{
+    return os << val.location() << "@" << val.role();
+}
+
+inline std::ostream& operator<<(std::ostream& os, const couple& val)
+{
+    return os << val.red() << "&&" << val.blue();
 }
 
 }

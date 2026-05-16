@@ -1,7 +1,21 @@
 #include <cstring>
+#include <sstream>
+#include <iomanip>
 #include "proto.h"
 
 namespace ricochet {
+
+std::string buffer::dump(size_t pos, size_t size) const
+{
+    std::ostringstream oss;
+    for (size_t i = pos; i < std::min(m_data.size(), pos + size); ++i) 
+    {
+        if (i > pos)
+            oss << " ";
+        oss << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(m_data[i]);
+    }
+    return oss.str();
+}
 
 endpoint::endpoint(const boost::asio::ip::address& addr, uint16_t port)
 {
@@ -195,32 +209,32 @@ query::value query::payload() const
 {
     kind which = type();
 
-    if (m_data.size() < 6) // tag (1) + length (4) + payload (1) minimum
+    if (m_data.size() < 4) // tag (1) + length (2) + payload (1) minimum
          throw malformed_message("Invalid protocol payload");
 
     if (which == kind::provide)
     {
-        return static_cast<protocol>(m_data[5]); // Skip tag + length
+        return static_cast<protocol>(m_data[3]); // Skip tag + length
     }
     else if (which == kind::connect)
     {
-        size_t len = m_data[5] == 4 ? 16 : 40; // Check address type after tag + length
-        if (m_data.size() < 1 + 4 + len) // tag + length + payload
+        size_t len = m_data[3] == 4 ? 16 : 40; // Check address type after tag + length
+        if (m_data.size() < 1 + 2 + len) // tag + length + payload
             throw malformed_message("Invalid couple payload");
 
-        std::vector<uint8_t> buffer(m_data.begin() + 5, m_data.begin() + 5 + len); // Skip tag + length
+        std::vector<uint8_t> buffer(m_data.begin() + 3, m_data.begin() + 3 + len); // Skip tag + length
         return couple { buffer };
     }
 
     throw malformed_message("Invalid query kind");
 }
 
-uint32_t query::length() const
+uint16_t query::length() const
 {
-    if (m_data.size() < 5) // tag (1) + length (4) minimum
+    if (m_data.size() < 3) // tag (1) + length (2) minimum
         return 0;
 
-    return ntohl(*reinterpret_cast<const uint32_t*>(m_data.data() + 1));
+    return ntohs(*reinterpret_cast<const uint16_t*>(m_data.data() + 1));
 }
 
 query query::make_provide_query(protocol proto)
@@ -228,11 +242,11 @@ query query::make_provide_query(protocol proto)
     query result;
     
     result.m_data.push_back(static_cast<uint8_t>(kind::provide));
-    result.m_data.insert(result.m_data.end(), {0, 0, 0, 0});
+    result.m_data.insert(result.m_data.end(), {0, 0});
     result.m_data.push_back(static_cast<uint8_t>(proto));
 
-    uint32_t* ptr = reinterpret_cast<uint32_t*>(&result.m_data[1]);
-    *ptr = htonl(static_cast<uint32_t>(result.m_data.size() - 5));
+    uint16_t* ptr = reinterpret_cast<uint16_t*>(&result.m_data[1]);
+    *ptr = htons(static_cast<uint16_t>(result.m_data.size() - 3));
 
     return result;
 }
@@ -242,12 +256,12 @@ query query::make_connect_query(const peer& red, const peer& blue)
     query result;
     
     result.m_data.push_back(static_cast<uint8_t>(kind::connect));
-    result.m_data.insert(result.m_data.end(), {0, 0, 0, 0});
+    result.m_data.insert(result.m_data.end(), {0, 0});
     result.m_data.insert(result.m_data.end(), red.data(), red.data() + red.size());
     result.m_data.insert(result.m_data.end(), blue.data(), blue.data() + blue.size());
-    
-    uint32_t* ptr = reinterpret_cast<uint32_t*>(&result.m_data[1]);
-    *ptr = htonl(static_cast<uint32_t>(result.m_data.size() - 5));
+
+    uint16_t* ptr = reinterpret_cast<uint16_t*>(&result.m_data[1]);
+    *ptr = htons(static_cast<uint16_t>(result.m_data.size() - 3));
 
     return result;
 }
@@ -265,23 +279,23 @@ reply::value reply::payload() const
     kind which = type();
     if (which == kind::binding)
     {
-        if (m_data.size() < 6) // tag (1) + length (4) + address type (1) minimum
+        if (m_data.size() < 4) // tag (1) + length (2) + address type (1) minimum
             throw malformed_message("Invalid binding payload");
 
-        size_t len = (m_data[5] == 4) ? 7 : 19; // Check address type after tag + length
+        size_t len = (m_data[3] == 4) ? 7 : 19; // Check address type after tag + length
 
-        if (m_data.size() < 1 + 4 + len) // tag + length + payload
+        if (m_data.size() < 1 + 2 + len) // tag + length + payload
             throw malformed_message("Invalid binding payload");
 
-        std::vector<uint8_t> buffer(m_data.begin() + 5, m_data.begin() + 5 + len); // Skip tag + length
+        std::vector<uint8_t> buffer(m_data.begin() + 3, m_data.begin() + 3 + len); // Skip tag + length
         return endpoint { buffer };
     }
     else if (which == kind::mistake)
     {
-        if (m_data.size() < 6) // tag (1) + length (4) + error code (1)
+        if (m_data.size() < 4) // tag (1) + length (2) + error code (1)
             throw malformed_message("Invalid mistake payload");
 
-        return static_cast<failure>(m_data[5]); // Skip tag + length
+        return static_cast<failure>(m_data[3]); // Skip tag + length
     }
     else if (which == kind::confirm)
     {
@@ -291,12 +305,12 @@ reply::value reply::payload() const
     throw malformed_message("Invalid reply kind");
 }
 
-uint32_t reply::length() const
+uint16_t reply::length() const
 {
-    if (m_data.size() < 5) // tag (1) + length (4) minimum
+    if (m_data.size() < 3) // tag (1) + length (2) minimum
         return 0;
     
-    return ntohl(*reinterpret_cast<const uint32_t*>(m_data.data() + 1));
+    return ntohs(*reinterpret_cast<const uint16_t*>(m_data.data() + 1));
 }
 
 reply reply::make_binding_reply(const endpoint& relay)
@@ -304,11 +318,11 @@ reply reply::make_binding_reply(const endpoint& relay)
     reply result;
 
     result.m_data.push_back(static_cast<uint8_t>(kind::binding));
-    result.m_data.insert(result.m_data.end(), {0, 0, 0, 0});
+    result.m_data.insert(result.m_data.end(), {0, 0});
     result.m_data.insert(result.m_data.end(), relay.data(), relay.data() + relay.size());
 
-    uint32_t* ptr = reinterpret_cast<uint32_t*>(&result.m_data[1]);
-    *ptr = htonl(static_cast<uint32_t>(result.m_data.size() - 5));
+    uint16_t* ptr = reinterpret_cast<uint16_t*>(&result.m_data[1]);
+    *ptr = htons(static_cast<uint16_t>(result.m_data.size() - 3));
 
     return result;
 }
@@ -318,12 +332,12 @@ reply reply::make_mistake_reply(failure err)
     reply result;
     
     result.m_data.push_back(static_cast<uint8_t>(kind::mistake));
-    result.m_data.insert(result.m_data.end(), {0, 0, 0, 0});
+    result.m_data.insert(result.m_data.end(), {0, 0});
     result.m_data.push_back(static_cast<uint8_t>(err));
 
-    uint32_t* ptr = reinterpret_cast<uint32_t*>(&result.m_data[1]);
-    *ptr = htonl(static_cast<uint32_t>(result.m_data.size() - 5));
-    
+    uint16_t* ptr = reinterpret_cast<uint16_t*>(&result.m_data[1]);
+    *ptr = htons(static_cast<uint32_t>(result.m_data.size() - 3));
+
     return result;
 }
 
@@ -332,11 +346,11 @@ reply reply::make_confirm_reply()
     reply result;
 
     result.m_data.push_back(static_cast<uint8_t>(kind::confirm));
-    result.m_data.insert(result.m_data.end(), {0, 0, 0, 0});
+    result.m_data.insert(result.m_data.end(), {0, 0});
 
-    uint32_t* ptr = reinterpret_cast<uint32_t*>(&result.m_data[1]);
-    *ptr = htonl(static_cast<uint32_t>(result.m_data.size() - 5));
-    
+    uint16_t* ptr = reinterpret_cast<uint16_t*>(&result.m_data[1]);
+    *ptr = htons(static_cast<uint32_t>(result.m_data.size() - 3));
+
     return result;
 }
 

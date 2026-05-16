@@ -18,16 +18,16 @@ int main(int argc, char* argv[])
         po::options_description desc("Ricochet relay server options");
         desc.add_options()
             ("help", "show help message")
-            ("host", po::value<std::string>()->default_value("0.0.0.0"), "listen address")
-            ("port", po::value<uint16_t>()->default_value(4433), "listen port")
-            ("cert", po::value<std::filesystem::path>()->default_value("server.crt"), "SSL certificate file")
-            ("key", po::value<std::filesystem::path>()->default_value("server.key"), "SSL private key file")
-            ("ca", po::value<std::filesystem::path>()->default_value("ca.crt"), "SSL CA certificate file")
-            ("repo", po::value<std::filesystem::path>()->required(), "path to client certificate repository")
-            ("idle", po::value<int>()->default_value(300), "idle session timeout in seconds")
+            ("bind-addr", po::value<std::string>()->default_value("0.0.0.0"), "listen address")
+            ("bind-port", po::value<uint16_t>()->default_value(4433), "listen port")
+            ("cert-file", po::value<std::filesystem::path>()->default_value("server.crt"), "SSL certificate file")
+            ("key-file", po::value<std::filesystem::path>()->default_value("server.key"), "SSL private key file")
+            ("ca-file", po::value<std::filesystem::path>()->default_value("ca.crt"), "SSL CA certificate file")
+            ("repo-path", po::value<std::filesystem::path>()->required(), "path to client certificate repository")
+            ("idle-time", po::value<int>()->default_value(300), "idle session timeout in seconds")
             ("client-limit", po::value<size_t>()->default_value(10), "maximum sessions per client")
             ("total-limit", po::value<size_t>()->default_value(1000), "maximum total sessions")
-            ("log-level", po::value<std::string>()->default_value("info"), "logging level (debug, info, warning, error, fatal)")
+            ("log-level", po::value<std::string>()->default_value("info"), "logging level (trace, debug, info, warning, error, fatal)")
             ("log-file", po::value<std::filesystem::path>(), "log file path (optional)")
         ;
 
@@ -41,63 +41,54 @@ int main(int argc, char* argv[])
             return 0;
         }
 
-        if (vm["idle"].as<int>() <= 0)
+        if (vm["idle-time"].as<int>() <= 0)
         {
-            _err_ << "Error: idle timeout must be positive";
+            _err_ << "Idle timeout must be positive";
             return 1;
         }
 
         if (vm["client-limit"].as<size_t>() == 0)
         {
-            _err_ << "Error: client limit must be positive";
+            _err_ << "Client limit must be positive";
             return 1;
         }
 
         if (vm["total-limit"].as<size_t>() == 0)
         {
-            _err_ << "Error: total limit must be positive";
+            _err_ << "Total limit must be positive";
             return 1;
         }
 
         ricochet::config config;
         config.server_endpoint = boost::asio::ip::tcp::endpoint(
-            boost::asio::ip::make_address(vm["host"].as<std::string>()),
-            vm["port"].as<uint16_t>()
+            boost::asio::ip::make_address(vm["bind-addr"].as<std::string>()),
+            vm["bind-port"].as<uint16_t>()
         );
-        config.server_cert = vm["cert"].as<std::filesystem::path>();
-        config.server_key = vm["key"].as<std::filesystem::path>();
-        config.client_repo = vm["repo"].as<std::filesystem::path>();
-        config.idle_timeout = boost::posix_time::seconds(vm["idle"].as<int>());
+        config.server_cert = vm["cert-file"].as<std::filesystem::path>();
+        config.server_key = vm["key-file"].as<std::filesystem::path>();
+        config.ca_cert = vm["ca-file"].as<std::filesystem::path>();
+        config.client_repo = vm["repo-path"].as<std::filesystem::path>();
+        config.idle_timeout = boost::posix_time::seconds(vm["idle-time"].as<int>());
         config.client_relay_limit = vm["client-limit"].as<size_t>();
         config.total_relay_limit = vm["total-limit"].as<size_t>();
-        config.log_level = vm["log-level"].as<std::string>();
-        
-        if (vm.count("log-file"))
-        {
-            config.log_file = vm["log-file"].as<std::filesystem::path>();
-        }
 
         boost::asio::io_context io;
         ricochet::server server(io, config);
 
         unsigned int thread_count = std::max(4u, std::thread::hardware_concurrency());
 
-        // Initialize logging
-        boost::log::trivial::severity_level log_level = ricochet::logging::parse_log_level(vm["log-level"].as<std::string>());
-        
-        // Initialize console logging
-        ricochet::logging::init_console_logging(log_level);
-        
-        // Initialize file logging if specified
+        boost::log::trivial::severity_level logging = ricochet::logging::parse_log_level(vm["log-level"].as<std::string>());
+        ricochet::logging::init_console_logging(logging);
+
         if (vm.count("log-file"))
         {
-            ricochet::logging::init_file_logging(vm["log-file"].as<std::filesystem::path>().string(), log_level);
+            ricochet::logging::init_file_logging(vm["log-file"].as<std::filesystem::path>().string(), logging);
         }
 
-        _inf_ << "Starting Ricochet relay server on " 
-              << config.server_endpoint.address() << ":" << config.server_endpoint.port();
+        _inf_ << "Starting Ricochet relay server on " << config.server_endpoint.address() << ":" << config.server_endpoint.port();
         _inf_ << "SSL certificate: " << config.server_cert;
         _inf_ << "SSL private key: " << config.server_key;
+        _inf_ << "CA certificate: " << config.ca_cert;
         _inf_ << "Client repository: " << config.client_repo;
         _inf_ << "Idle timeout: " << config.idle_timeout.total_seconds() << " seconds";
         _inf_ << "Max sessions per client: " << config.client_relay_limit;
@@ -139,7 +130,7 @@ int main(int argc, char* argv[])
     }
     catch (const std::exception& e)
     {
-        _err_ << "Error: " << e.what();
+        _err_ << e.what();
         return 1;
     }
 

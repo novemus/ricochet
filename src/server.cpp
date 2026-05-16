@@ -45,17 +45,15 @@ void server::accept()
     m_server.bind(m_config.server_endpoint);
     m_server.listen();
 
-    _inf_ << "Server listening on " << m_config.server_endpoint.address() << ":" << m_config.server_endpoint.port();
+    _inf_ << "Server listening on " << m_config.server_endpoint;
     do_accept();
 }
 
 void server::stop()
 {
-    _inf_ << "Stopping server...";
-
     boost::system::error_code ec;
     m_server.close(ec);
-
+    
     std::lock_guard<std::mutex> lock(m_mutex);
     for (auto& [hash, sessions] : m_relays)
     {
@@ -65,7 +63,7 @@ void server::stop()
         }
     }
 
-    m_relays.clear();
+    _inf_ << "Server is stopped";
 }
 
 void server::do_accept()
@@ -102,7 +100,7 @@ void server::do_accept()
                         std::lock_guard<std::mutex> lock(m_mutex);
                         if (!check_limits(hash))
                         {
-                            _wrn_ << "Connection limits reached for client " << hash.substr(0, 16) << "...";
+                            _wrn_ << "Connection limits reached for client " << hash.substr(0, 16);
                             relay->error(ricochet::failure::limit_reached);
                         }
                         else
@@ -112,20 +110,23 @@ void server::do_accept()
                                 if (auto self = weak.lock())
                                 {
                                     std::lock_guard<std::mutex> lock(m_mutex);
+
                                     m_relays[hash].erase(relay);
+                                    _inf_ << "Removed client " << hash.substr(0, 16) << " session, count=" << m_relays[hash].size();
+
                                     if (m_relays[hash].empty())
                                         m_relays.erase(hash);
-                                    _dbg_ << "Session closed for client " << hash.substr(0, 16) << "..., active sessions: " << m_relays.size();
                                 }
                             });
-                            _inf_ << "New session started for client " << hash.substr(0, 16) << "..., total sessions: " << m_relays[hash].size();
                             relay->start();
                         }
+
                         m_relays[hash].insert(relay);
+                        _inf_ << "Added client " << hash.substr(0, 16) << " session, count=" << m_relays[hash].size();
                     }
                     catch (const std::exception& e)
                     {
-                        _wrn_ << "Error processing connection: " << e.what();
+                        _wrn_ << "Can't create session: " << e.what();
                     }
                 }
                 else
@@ -150,14 +151,12 @@ bool server::check_limits(const std::string& client)
 
     for (auto& [hash, sessions] : m_relays)
     {
-        for (auto it = sessions.begin(); it != sessions.end();)
-        {
-            if (client == hash)
-                ++client_sessions;
-            ++total_sessions;
-            ++it;
-        }
+        if (client == hash)
+            client_sessions = sessions.size();
+        total_sessions += sessions.size();
     }
+
+    _inf_ << "Active session count: " << total_sessions;
 
     return total_sessions < m_config.total_relay_limit && client_sessions < m_config.client_relay_limit;
 }

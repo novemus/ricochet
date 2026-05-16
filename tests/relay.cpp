@@ -254,7 +254,7 @@ BOOST_AUTO_TEST_CASE(get_outgoing_address)
         BOOST_TEST_MESSAGE("Got IPv6 address: " + ipv6_address.to_string());
 
         BOOST_CHECK(!ipv6_address.is_unspecified());
-        BOOST_CHECK(ipv6_address.is_v4());
+        BOOST_CHECK(ipv6_address.is_v6());
     }
     catch (const ricochet::unavailable_proto& e)
     {
