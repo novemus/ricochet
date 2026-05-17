@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(ricochet VERSION 1.0.0 DESCRIPTION "Proxy service for non-public p2p applications" LANGUAGES CXX)
+project(ricochet VERSION 1.0.0 DESCRIPTION "Relay server for non-public p2p applications" LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -61,7 +61,9 @@ if(MSVC)
     add_definitions(-D_WIN32_WINNT=0x0601)
 endif()
 
-if(NOT CMAKE_SKIP_INSTALL_RULES)
+########## install ##########
+
+if (NOT CMAKE_SKIP_INSTALL_RULES)
 
     include(GNUInstallDirs)
     include(CMakePackageConfigHelpers)
@@ -117,10 +119,10 @@ if(NOT CMAKE_SKIP_INSTALL_RULES)
     endif()
 endif()
 
-# Enable testing
+########## tests ##########
+
 enable_testing()
 
-# Create test executable
 add_executable(ricochet_tests
     src/proto.cpp
     src/repo.cpp
@@ -150,5 +152,70 @@ target_link_libraries(ricochet_tests Boost::coroutine Boost::log Boost::unit_tes
 target_include_directories(ricochet_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 set_target_properties(ricochet_tests PROPERTIES DEBUG_POSTFIX "d")
 
-# Add test
 add_test(NAME ricochet_tests COMMAND ricochet_tests)
+
+########## packages ##########
+
+if(NOT CMAKE_SKIP_INSTALL_RULES)
+
+    if(NOT CPACK_PACKAGE_RELEASE)
+        set(CPACK_PACKAGE_RELEASE "1")
+    endif()
+
+    set(DEVEL_DOC_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/CHANGELOG.md"
+        )
+
+    if (CMAKE_HOST_SYSTEM_NAME MATCHES "Linux")
+        set(CPACK_COMPONENTS_ALL_IN_ONE_PACKAGE ON)
+        cmake_host_system_information(RESULT DISTR QUERY DISTRIB_ID)
+        if (DISTR MATCHES "(debian)|(ubuntu)|(kali)|(astra)")
+            cmake_host_system_information(RESULT DISTR_CODENAME QUERY DISTRIB_VERSION_CODENAME)
+            set(CPACK_DEBIAN_PACKAGE_RELEASE "${CPACK_PACKAGE_RELEASE}+${DISTR_CODENAME}")
+            set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+            set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+            set(CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS ON)
+            set(CPACK_DEBIAN_DEBUGINFO_PACKAGE ON)
+            set(CPACK_DEB_COMPONENT_INSTALL ON)
+
+            set(DEBIAN_DOC_FILES
+                "${CMAKE_CURRENT_SOURCE_DIR}/linux/copyright"
+                "${CMAKE_CURRENT_SOURCE_DIR}/linux/README.Debian"
+                )
+            install(FILES ${DEBIAN_DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/ricochet" COMPONENT bin_deb_files)
+            if(BUILD_SHARED_LIBS)
+                install(FILES ${DEBIAN_DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/libricochet" COMPONENT lib_deb_files)
+            else()
+                install(FILES ${DEBIAN_DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/libricochet-dev" COMPONENT dev_deb_files)
+                install(FILES ${DEVEL_DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/libricochet-dev" COMPONENT dev_doc_files)
+            endif()
+        else()
+            cmake_host_system_information(RESULT DISTR_VERSION QUERY DISTRIB_VERSION_ID)
+            if (DISTR MATCHES "fedora")
+                set(CPACK_RPM_PACKAGE_RELEASE "${CPACK_PACKAGE_RELEASE}.fc${DISTR_VERSION}")
+            elseif(DISTRO_ID MATCHES "rhel|centos|almalinux|rocky")
+                string(REGEX REPLACE "\\." "" DISTR_VERSION "${DISTR_VERSION}")
+                set(CPACK_RPM_PACKAGE_RELEASE "${CPACK_PACKAGE_RELEASE}.el${DISTR_VERSION}")
+            else()
+                set(CPACK_RPM_PACKAGE_RELEASE "${CPACK_PACKAGE_RELEASE}")
+            endif()
+
+            if(NOT BUILD_SHARED_LIBS)
+                install(FILES ${DEVEL_DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/libricochet-devel" COMPONENT dev_doc_files)
+            endif()
+
+            set(CPACK_RPM_FILE_NAME RPM-DEFAULT)
+            set(CPACK_RPM_PACKAGE_AUTOREQ "1")
+            set(CPACK_RPM_PACKAGE_LICENSE "Apache 2.0")
+            set(CPACK_RPM_COMPONENT_INSTALL ON)
+            set(CPACK_RPM_BUILD_SOURCE_DIRS_PREFIX "/src/ricochet")
+        endif()
+    elseif(NOT BUILD_SHARED_LIBS)
+        install(FILES ${DEVEL_DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/libricochet" COMPONENT dev_doc_files)
+    endif()
+
+    string(TOLOWER "${PROJECT_NAME}-${PROJECT_VERSION}-${CPACK_PACKAGE_RELEASE}-${CMAKE_HOST_SYSTEM_NAME}-${CMAKE_HOST_SYSTEM_PROCESSOR}" CPACK_ARCHIVE_FILE_NAME)
+    include(CPack)
+endif()
