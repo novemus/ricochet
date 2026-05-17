@@ -20,13 +20,13 @@ int main(int argc, char* argv[])
             ("help", "show help message")
             ("bind-addr", po::value<std::string>()->default_value("0.0.0.0"), "listen address")
             ("bind-port", po::value<uint16_t>()->default_value(4433), "listen port")
-            ("cert-file", po::value<std::filesystem::path>()->default_value("server.crt"), "SSL certificate file")
+            ("cert-file", po::value<std::filesystem::path>()->default_value("server.pem"), "SSL certificate file")
             ("key-file", po::value<std::filesystem::path>()->default_value("server.key"), "SSL private key file")
-            ("ca-file", po::value<std::filesystem::path>()->default_value("ca.crt"), "SSL CA certificate file")
-            ("repo-path", po::value<std::filesystem::path>()->required(), "path to client certificate repository")
+            ("ca-file", po::value<std::filesystem::path>()->default_value("ca.pem"), "SSL CA certificate file")
+            ("repo-path", po::value<std::filesystem::path>()->default_value(std::filesystem::current_path()), "path to client SSL certificate repository")
             ("idle-time", po::value<int>()->default_value(300), "idle session timeout in seconds")
             ("client-limit", po::value<size_t>()->default_value(10), "maximum sessions per client")
-            ("total-limit", po::value<size_t>()->default_value(1000), "maximum total sessions")
+            ("total-limit", po::value<size_t>()->default_value(100), "maximum sessions count")
             ("log-level", po::value<std::string>()->default_value("info"), "logging level (trace, debug, info, warning, error, fatal)")
             ("log-file", po::value<std::filesystem::path>(), "log file path (optional)")
         ;
@@ -41,21 +41,29 @@ int main(int argc, char* argv[])
             return 0;
         }
 
+        boost::log::trivial::severity_level logging = ricochet::logging::parse_log_level(vm["log-level"].as<std::string>());
+        ricochet::logging::init_console_logging(logging);
+
+        if (vm.count("log-file"))
+        {
+            ricochet::logging::init_file_logging(vm["log-file"].as<std::filesystem::path>().string(), logging);
+        }
+
         if (vm["idle-time"].as<int>() <= 0)
         {
-            _err_ << "Idle timeout must be positive";
+            _ftl_ << "Idle timeout must be positive";
             return 1;
         }
 
         if (vm["client-limit"].as<size_t>() == 0)
         {
-            _err_ << "Client limit must be positive";
+            _ftl_ << "Client limit must be positive";
             return 1;
         }
 
         if (vm["total-limit"].as<size_t>() == 0)
         {
-            _err_ << "Total limit must be positive";
+            _ftl_ << "Total limit must be positive";
             return 1;
         }
 
@@ -76,14 +84,6 @@ int main(int argc, char* argv[])
         ricochet::server server(io, config);
 
         unsigned int thread_count = std::max(4u, std::thread::hardware_concurrency());
-
-        boost::log::trivial::severity_level logging = ricochet::logging::parse_log_level(vm["log-level"].as<std::string>());
-        ricochet::logging::init_console_logging(logging);
-
-        if (vm.count("log-file"))
-        {
-            ricochet::logging::init_file_logging(vm["log-file"].as<std::filesystem::path>().string(), logging);
-        }
 
         _inf_ << "Starting Ricochet relay server on " << config.server_endpoint.address() << ":" << config.server_endpoint.port();
         _inf_ << "SSL certificate: " << config.server_cert;
@@ -130,7 +130,7 @@ int main(int argc, char* argv[])
     }
     catch (const std::exception& e)
     {
-        _err_ << e.what();
+        _ftl_ << e.what();
         return 1;
     }
 

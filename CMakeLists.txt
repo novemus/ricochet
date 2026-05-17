@@ -98,7 +98,7 @@ if (NOT CMAKE_SKIP_INSTALL_RULES)
         COMPONENT cmake_files
         DESTINATION "${RICICHET_INSTALL_CMAKEDIR}")
 
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/export.h" "src/agent.h" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ricochet" COMPONENT header_files)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/export.h" "src/proto.h" "src/agent.h" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ricochet" COMPONENT header_files)
 
     if(MSVC)
         install(FILES "$<TARGET_PDB_FILE:ricochet>" COMPONENT pdb_files

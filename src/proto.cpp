@@ -299,7 +299,7 @@ reply::value reply::payload() const
     }
     else if (which == kind::confirm)
     {
-        return true;
+        return true; // Skip tag + length
     }
 
     throw malformed_message("Invalid reply kind");
@@ -336,7 +336,7 @@ reply reply::make_mistake_reply(failure err)
     result.m_data.push_back(static_cast<uint8_t>(err));
 
     uint16_t* ptr = reinterpret_cast<uint16_t*>(&result.m_data[1]);
-    *ptr = htons(static_cast<uint32_t>(result.m_data.size() - 3));
+    *ptr = htons(static_cast<uint16_t>(result.m_data.size() - 3));
 
     return result;
 }
@@ -349,7 +349,7 @@ reply reply::make_confirm_reply()
     result.m_data.insert(result.m_data.end(), {0, 0});
 
     uint16_t* ptr = reinterpret_cast<uint16_t*>(&result.m_data[1]);
-    *ptr = htons(static_cast<uint32_t>(result.m_data.size() - 3));
+    *ptr = htons(static_cast<uint16_t>(result.m_data.size() - 3));
 
     return result;
 }

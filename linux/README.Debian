@@ -3,12 +3,12 @@ Ricochet for Debian
 
 This package contains the 'Ricochet' app.
 
-The 'Ricochet' app provides the ability to run relay server to connect
-network UDP/TCP applications which cannot connect each other directly due
-to the strict firewall or NAT rules. It works like the TURN relay, but
-can be used for any apps based on UDP/TCP, not only for multimedia ones.
-After relay endpoint is negotiated, peers connect each other transparently
-via the relay, which simply retransmit raw UDP/TCP data between peers.
+The 'Ricochet' app provides the ability to connect network UDP/TCP
+applications which cannot connect each other directly due to the strict
+firewall or NAT rules. It works like the TURN relay, but can be used for
+any apps based on UDP/TCP, not only for multimedia ones. After relay
+endpoint is negotiated, the peers connect each other transparently via
+the relay, which simply retransmit raw UDP/TCP data.
 
 https://github.com/novemus/ricochet
 

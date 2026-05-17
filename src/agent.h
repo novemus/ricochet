@@ -1,8 +1,6 @@
 #pragma once
 
 #include <boost/asio.hpp>
-#include <boost/asio/ip/basic_endpoint.hpp>
-#include <boost/asio/ssl.hpp>
 #include <boost/asio/spawn.hpp>
 #include <filesystem>
 #include "proto.h"
