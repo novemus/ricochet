@@ -1,12 +1,33 @@
-# README
+# Ricochet
 
-The [Ricochet](https://github.com/novemus/ricochet) app provides the ability to connect network UDP/TCP applications which cannot connect each other directly due to the strict firewall or NAT rules. It works like the TURN relay, but can be used for any apps based on UDP/TCP, not only for multimedia ones. After relay endpoint is negotiated, the peers connect each other transparently via the relay, which simply retransmit raw UDP/TCP data. The project consists of relay server and simple C++ client library. Of couse you need to use the client with some signaling service to synchronize the peers.
+[Ricochet](https://github.com/novemus/ricochet) is a relay server and C++ client library for bridging UDP/TCP applications that cannot connect directly due to strict firewall rules or NAT constraints.
+
+It works similarly to a TURN relay, but unlike TURN it is not tied to multimedia protocols — it can relay raw UDP or TCP data for any type of application.
+
+A typical scenario is the connection of peers when one of them located behind a symmetric NAT. For success, in that case another peer must have no NAT or Full Cone NAT filtering. If these conditions are not met, then you need a relay.
+
+## How It Works
+
+Peers must coordinate connection via some rendezvous service. Peer with bad NAT must act as a `client`, another one can be `server` or `client`. No matter who acts as a relay initiator.
+
+1. **Relay allocation** — the relay initiator requests a relay endpoint from the server, specifying the desired protocol (UDP/TCP, IPv4/IPv6). The server returns the allocated address and port.
+2. **Peer coordination** — relay initiator negotiates connection roles and startup synchronization with peers and passes them the relay endpoint via a rendezvous service.
+3. **Relay launch** — the relay initiator forwards to the server the description (endpoints and roles) of both peers. The relay then accepts connections from the `client` peer, attempts to connect to the `server` peer, and begins transparent data forwarding once both sides are connected.
+
+Endpoint of the `server` peer must be defined, but the `client` peer endpoint used by the relay as an accept filter and can be defined partially or undefined at all.
+
+## Features
+
+- **Full protocol matrix:** UDP4, TCP4, UDP6, TCP6
+- **Security:** mutual TLS (mTLS) with certificate-based authentication
+- **Flexible limits:** per-client session cap and global session limit
+- **Idle timeout:** automatic cleanup of inactive sessions
+- **Logging:** configurable verbosity (trace, debug, info, warning, error, fatal), optional log file output
+- **Multi-threading:** automatic scaling to the number of CPU cores
 
 ## Build
 
-You can download [prebuild packages](https://github.com/novemus/ricochet/releases) for Debian and Windows platforms.
-
-The project depends on [boost](https://github.com/boostorg/boost), [openssl](https://github.com/openssl/openssl) libraries. Clone the repository, then configure and build project.
+The project depends on [Boost](https://github.com/boostorg/boost) and [OpenSSL](https://github.com/openssl/openssl). You can download [prebuilt packages for Debian and Windows](https://github.com/novemus/ricochet/releases) or build from source:
 
 ```console
 $ cd ~
@@ -17,25 +38,27 @@ $ cmake --build ./build --target all
 $ cmake --build ./build --target install
 ```
 
-## Using
+## Usage
 
-The server uses SSL protocol and mTLS authentication. So you need to use some CA infrastructue to issue SSL certificates. Alternatively you can use preshared self-signed SSL certificates. In second case your client must use server certificate as the CA and server must store client certificates in the local repository. This is the tree of catalogs with the following structure:
+### Certificate Setup
+
+The server uses mTLS. You can rely on your own PKI infrastructure to issue certificates, or use preshared self-signed certificates. In the latter case, the client must use the server certificate as a CA, and the server must store client certificates in a local repository with the following structure:
 
 ```console
-repo
-  |_ owner1
-      |_ host1
-          |_ cert.pem
-      |_ host2
-          |_ cert.crt
-  |_ owner2
-      |_ host1
-          |_ cert.pem
+repo/
+  ├── owner1/
+  │   ├── host1/
+  │   │   └── cert.pem
+  │   └── host2/
+  │       └── cert.crt
+  └── owner2/
+      └── host1/
+          └── cert.pem
 ```
 
-Certificates must have extension *.pem* or *.crt*
+Accepted file extensions: `.pem` and `.crt`.
 
-Command to run server:
+### Running the Server
 
 ```console
 $ ./ricochet
@@ -43,29 +66,23 @@ $ ./ricochet
 
 Server options:
 
-`--bind-addr arg (=0.0.0.0)` - IP address to bind the server
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--bind-addr` | `0.0.0.0` | IP address to bind the server |
+| `--bind-port` | `4433` | Port to bind the server |
+| `--cert-file` | `server.pem` | Path to the server SSL certificate |
+| `--key-file` | `server.key` | Path to the SSL private key |
+| `--ca-file` | `ca.pem` | Path to the CA certificate |
+| `--repo-path` | `.` | Path to the client certificate repository |
+| `--idle-time` | `300` | Idle session timeout in seconds |
+| `--client-limit` | `10` | Maximum sessions per client |
+| `--total-limit` | `100` | Maximum concurrent sessions |
+| `--log-level` | `info` | Logging level (trace, debug, info, warning, error, fatal) |
+| `--log-file` | — | Path to log file (optional) |
 
-`--bind-port arg (=4433)` - port to bind the server
+### Client API
 
-`--cert-file arg (=server.pem)` - path to the server SSL certificate
-
-`--key-file arg (=server.key)` - path to the server SSL private key
-
-`--ca-file arg (=ca.pem)` - path to the CA certificate
-
-`--repo-path arg (=.)` - path to the client SSL certificate repository
-
-`--idle-time arg (=300)` - idle session timeout in seconds
-
-`--client-limit arg (=10)` - maximum sessions per client
-
-`--total-limit arg (=100)` - maximum sessions count
-
-`--log-level arg (=info)` - logging level (trace, debug, info, warning, error, fatal)
-
-`--log-file arg` - log file path (optional)
-
-Brief description of the client API:
+Brief interface overview:
 
 ```cpp
 #include <boost/asio.hpp>
@@ -89,13 +106,17 @@ std::shared_ptr<agent> create_agent(const boost::asio::ip::tcp::endpoint& server
 }
 ```
 
-To deploy and start relay you should make the following steps. Call *assign_relay* method to allocate relay. It gives protocol argument and returns relay endpoint assigned by the server. It can throw exception if the specified protocol is not supported on the server or session limit is reached. After that pass the endpoint to the peers and define its connection roles. If one of peers use server role, at this point it must start accepting connection from the relay endpoint. Then call *launch_relay* method to start the relay. It gives peer description arguments. Now the client peers should start connection to the relay. The relay starts the accepting connections from the client peers, makes several tries to connect to the server peer and starts data transfering after peers connected.
+**Workflow:**
 
-See the [agent.h](https://github.com/novemus/ricochet/blob/master/src/ricochet/agent.h) and [proto.h](https://github.com/novemus/ricochet/blob/master/src/ricochet/proto.h) headers for details.
+1. Call `assign_relay` with the desired protocol. The server returns an allocated relay endpoint or throws an exception (`unavailable_proto`, `limit_reached`).
+2. Define peer roles and forward them with the realay endpoint to both peers via a rendezvous service. If some peer uses the `server` role, it must start accepting connections on the relay endpoint beforehand.
+3. Call `launch_relay` with the description of both peers. The relay starts accepting connections from `client` peers, makes several attempts to connect to the `server` peer, and begins transparent data forwarding once the connection is established.
+
+See the header files [agent.h](src/agent.h) and [proto.h](src/proto.h) for details.
 
 ## License
 
-The Ricochet is licensed under the Apache License 2.0, which means that you are free to get and use it for commercial and non-commercial purposes as long as you fulfill its conditions. See the LICENSE.txt file for more details.
+Licensed under the Apache License 2.0. You are free to use it for commercial and non-commercial purposes as long as you fulfill its conditions. See [LICENSE.txt](LICENSE.txt) for details.
 
 ## Copyright
 
