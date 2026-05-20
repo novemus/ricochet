@@ -1,5 +1,5 @@
 #include <boost/asio.hpp>
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__linux__)
 #include <sys/socket.h>
 #endif
 #include <memory>
@@ -99,7 +99,7 @@ tcp_relay::tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_t
 
     m_server.open(protocol);
     m_server.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__linux__)
     int optval = 1;
     ::setsockopt(m_server.native_handle(), SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
 #endif
@@ -207,7 +207,7 @@ void tcp_relay::connect_peer(const endpoint& which)
     {
         peer->open(endpoint.protocol());
         peer->set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__linux__)
         int optval = 1;
         ::setsockopt(peer->native_handle(), SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
 #endif
@@ -335,14 +335,14 @@ void tcp_relay::transmit_data(boost::asio::ip::tcp::socket& from, boost::asio::i
                         }
                         else
                         {
-                            _dbg_ << "TCP relay " << this << " failed to write to " << to.remote_endpoint() << ": " << ec.message();
+                            _dbg_ << "TCP relay " << this << " failed to write data: " << ec.message();
                             break_relay();
                         }
                     });
             }
             else
             {
-                _dbg_ << "TCP relay " << this << " failed to read from " << from.remote_endpoint() << ": " << ec.message();
+                _dbg_ << "TCP relay " << this << " failed to read data: " << ec.message();
                 break_relay();
             }
         }));
@@ -485,10 +485,10 @@ void udp_relay::read_socket()
             {
                 if (!can_transmit())
                 {
-                    bool near_address_matches = m_near.address().is_unspecified() || peer->address() == m_near.address();
-                    bool near_port_matches = m_near.port() == 0 || peer->port() == m_near.port();
-                    bool away_address_matches = m_away.address().is_unspecified() || peer->address() == m_away.address();
-                    bool away_port_matches = m_away.port() == 0 || peer->port() == m_away.port();
+                    bool near_address_matches = m_near.address().is_unspecified() || (m_near.port() == 0 && peer->address() == m_near.address());
+                    bool near_port_matches = m_near.port() == 0 || (m_near.address().is_unspecified() && peer->port() == m_near.port());
+                    bool away_address_matches = m_away.address().is_unspecified() || (m_away.port() == 0 && peer->address() == m_away.address());
+                    bool away_port_matches = m_away.port() == 0 || (m_away.address().is_unspecified() && peer->port() == m_away.port());
 
                     if (near_address_matches && near_port_matches)
                     {

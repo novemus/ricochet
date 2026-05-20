@@ -1,4 +1,5 @@
 #include <boost/asio.hpp>
+#include <boost/asio/spawn.hpp>
 #include <boost/test/unit_test.hpp>
 #include <boost/asio/executor_work_guard.hpp>
 #include <memory>
@@ -44,8 +45,15 @@ public:
     virtual void connect()
     {
         start_timer();
-        m_socket.connect(m_peer);
+        
+        auto fut = boost::asio::spawn(m_socket.get_executor(), [&](boost::asio::yield_context yield)
+        {
+            m_socket.async_connect(m_peer, yield);
+        }, 
+        boost::asio::use_future);
+
         stop_timer();
+        fut.get();
     }
 
     virtual void close()
@@ -57,17 +65,32 @@ public:
     void send(const std::vector<uint8_t>& data)
     {
         start_timer();
-        boost::asio::write(m_socket, boost::asio::buffer(data));
+
+        auto fut = boost::asio::spawn(m_socket.get_executor(), [&](boost::asio::yield_context yield)
+        {
+            boost::asio::async_write(m_socket, boost::asio::buffer(data), yield);
+        }, 
+        boost::asio::use_future);
+
         stop_timer();
+        fut.get();
     }
 
     std::vector<uint8_t> receive(size_t size)
     {
         start_timer();
+
         std::vector<uint8_t> buffer(size);
-        size_t read = boost::asio::read(m_socket, boost::asio::buffer(buffer));
-        buffer.resize(read);
+        auto fut = boost::asio::spawn(m_socket.get_executor(), [&](boost::asio::yield_context yield)
+        {
+            size_t read = boost::asio::async_read(m_socket, boost::asio::buffer(buffer), yield);
+            buffer.resize(read);
+        }, 
+        boost::asio::use_future);
+
         stop_timer();
+        fut.get();
+
         return buffer;
     }
 
@@ -108,17 +131,24 @@ public:
 
     void connect() override
     {
-        start_timer();
-
         do
         {
             if (m_socket.is_open())
                 m_socket.close();
-            m_acceptor.accept(m_socket);
+
+            start_timer();
+
+            auto fut = boost::asio::spawn(m_acceptor.get_executor(), [&](boost::asio::yield_context yield)
+            {
+                m_acceptor.async_accept(m_socket, yield);
+            }, 
+            boost::asio::use_future);
+
+            stop_timer();
+
+            fut.get();
         } 
         while (m_socket.remote_endpoint() != m_peer);
-
-        stop_timer();
 
         if (m_acceptor.is_open())
             m_acceptor.close();
@@ -167,14 +197,22 @@ struct udp_helper
         right.send(boost::asio::buffer(data));
 
         std::vector<uint8_t> recv(data.size());
-        auto read = right.receive(boost::asio::buffer(recv));
-        recv.resize(read);
+        boost::asio::spawn(right.get_executor(), [&](boost::asio::yield_context yield)
+        {
+            auto read = right.async_receive(boost::asio::buffer(recv), yield);
+            recv.resize(read);
+        }, 
+        boost::asio::use_future).get();
 
         if (recv != data)
             throw boost::system::system_error(boost::asio::error::invalid_argument);
 
-        read = left.receive(boost::asio::buffer(recv));
-        recv.resize(read);
+        boost::asio::spawn(left.get_executor(), [&](boost::asio::yield_context yield)
+        {
+            auto read = left.async_receive(boost::asio::buffer(recv), yield);
+            recv.resize(read);
+        }, 
+        boost::asio::use_future).get();
     
         if (recv != data)
             throw boost::system::system_error(boost::asio::error::invalid_argument);
@@ -210,8 +248,12 @@ struct udp_helper
         std::vector<uint8_t> recv(data.size());
         do
         {
-            auto read = to.receive(boost::asio::buffer(recv));
-            recv.resize(read);
+            boost::asio::spawn(to.get_executor(), [&](boost::asio::yield_context yield)
+            {
+                auto read = to.async_receive(boost::asio::buffer(recv), yield);
+                recv.resize(read);
+            }, 
+            boost::asio::use_future).get();
         } 
         while (recv != data);
 
