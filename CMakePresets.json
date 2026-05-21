@@ -1,0 +1,380 @@
+{
+    "version": 6,
+    "configurePresets": [
+        {
+            "name": "config-base",
+            "hidden": true,
+            "binaryDir": "${sourceDir}/out/$env{TARGET_OS}/$env{TARGET_ARCH}/build/${presetName}",
+            "installDir": "${sourceDir}/out/$env{TARGET_OS}/$env{TARGET_ARCH}/install"
+        },
+        {
+            "name": "relwithdebinfo-base",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_CONFIGURATION_TYPES": "RelWithDebInfo"
+            }
+        },
+        {
+            "name": "release-base",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_CONFIGURATION_TYPES": "Release"
+            }
+        },
+        {
+            "name": "debug-base",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_CONFIGURATION_TYPES": "Debug",
+                "CMAKE_DEBUG_POSTFIX": "d"
+            }
+        },
+        {
+            "name": "static-relwithdebinfo",
+            "inherits": ["config-base", "relwithdebinfo-base"],
+            "cacheVariables": {
+                "BUILD_SHARED_LIBS": "OFF",
+                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded"
+            }
+        },
+        {
+            "name": "static-release",
+            "inherits": ["config-base", "release-base"],
+            "cacheVariables": {
+                "BUILD_SHARED_LIBS": "OFF",
+                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded"
+            }
+        },
+        {
+            "name": "static-debug",
+            "inherits": ["config-base", "debug-base"],
+            "cacheVariables": {
+                "BUILD_SHARED_LIBS": "OFF",
+                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDebug"
+            }
+        },
+        {
+            "name": "shared-relwithdebinfo",
+            "inherits": ["config-base", "relwithdebinfo-base"],
+            "cacheVariables": {
+                "BUILD_SHARED_LIBS": "ON",
+                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL"
+            }
+        },
+        {
+            "name": "shared-release",
+            "inherits": ["config-base", "release-base"],
+            "cacheVariables": {
+                "BUILD_SHARED_LIBS": "ON",
+                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL"
+            }
+        },
+        {
+            "name": "shared-debug",
+            "inherits": ["config-base", "debug-base"],
+            "cacheVariables": {
+                "BUILD_SHARED_LIBS": "ON",
+                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDebugDLL"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "shared-debug",
+            "displayName": "Debug",
+            "configuration": "Debug",
+            "configurePreset": "shared-debug"
+        },
+        {
+            "name": "shared-release",
+            "displayName": "Release",
+            "configuration": "Release",
+            "configurePreset": "shared-release"
+        },
+        {
+            "name": "shared-relwithdebinfo",
+            "displayName": "RelWithDebInfo",
+            "configuration": "RelWithDebInfo",
+            "configurePreset": "shared-relwithdebinfo"
+        },
+        {
+            "name": "static-debug",
+            "displayName": "Debug",
+            "configuration": "Debug",
+            "configurePreset": "static-debug"
+        },
+        {
+            "name": "static-release",
+            "displayName": "Release",
+            "configuration": "Release",
+            "configurePreset": "static-release"
+        },
+        {
+            "name": "static-relwithdebinfo",
+            "displayName": "RelWithDebInfo",
+            "configuration": "RelWithDebInfo",
+            "configurePreset": "static-relwithdebinfo"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "test-base",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "error",
+                "stopOnFailure": true
+            },
+            "hidden": true
+        },
+        {
+            "name": "static-release",
+            "configurePreset": "static-release",
+            "configuration": "Release",
+            "displayName": "Test",
+            "description": "All project tests",
+            "inherits": "test-base"
+        },
+        {
+            "name": "static-relwithdebinfo",
+            "configurePreset": "static-relwithdebinfo",
+            "configuration": "RelWithDebInfo",
+            "displayName": "Test",
+            "description": "All project tests",
+            "inherits": "test-base"
+        },
+        {
+            "name": "static-debug",
+            "configurePreset": "static-debug",
+            "configuration": "Debug",
+            "displayName": "Test",
+            "description": "All project tests",
+            "inherits": "test-base"
+        },
+        {
+            "name": "shared-release",
+            "configurePreset": "shared-release",
+            "configuration": "Release",
+            "displayName": "Test",
+            "description": "All project tests",
+            "inherits": "test-base"
+        },
+        {
+            "name": "shared-relwithdebinfo",
+            "configurePreset": "shared-relwithdebinfo",
+            "configuration": "RelWithDebInfo",
+            "displayName": "Test",
+            "description": "All project tests",
+            "inherits": "test-base"
+        },
+        {
+            "name": "shared-debug",
+            "configurePreset": "shared-debug",
+            "configuration": "Debug",
+            "displayName": "Test",
+            "description": "All project tests",
+            "inherits": "test-base"
+        }
+    ],
+    "packagePresets": [
+        {
+            "name": "debian-server",
+            "displayName": "ricochet (DEB)",
+            "description": "Server package",
+            "configurePreset": "static-relwithdebinfo",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            },
+            "variables": {
+                "CPACK_COMPONENTS_ALL": "server_files",
+                "CPACK_PACKAGE_DESCRIPTION_SUMMARY": "Ricochet relay server",
+                "CPACK_PACKAGE_DESCRIPTION": "Ricochet relay server executable.",
+                "CPACK_DEBIAN_PACKAGE_MAINTAINER": "Community"
+            },
+            "generators": [
+                "DEB"
+            ],
+            "configurations": [
+                "RelWithDebInfo"
+            ],
+            "packageName": "ricochet",
+            "packageDirectory": ".."
+        },
+        {
+            "name": "debian-client",
+            "displayName": "libricochet (DEB)",
+            "description": "Client package",
+            "configurePreset": "static-relwithdebinfo",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            },
+            "variables": {
+                "CPACK_COMPONENTS_ALL": "client_files",
+                "CPACK_DEBIAN_PACKAGE_DEPENDS": "libboost-dev (>= 1.74)",
+                "CPACK_PACKAGE_DESCRIPTION_SUMMARY": "Client for Ricochet relay server",
+                "CPACK_PACKAGE_DESCRIPTION": "C++ client library for Ricochet relay server.",
+                "CPACK_INSTALL_CMAKE_PROJECTS": "../static-relwithdebinfo;tubus;ALL;/;../shared-relwithdebinfo;tubus;ALL;/",
+                "CPACK_DEBIAN_PACKAGE_MAINTAINER": "Community"
+            },
+            "generators": [
+                "DEB"
+            ],
+            "configurations": [
+                "RelWithDebInfo"
+            ],
+            "packageName": "libricochet",
+            "packageDirectory": ".."
+        },
+        {
+            "name": "linux-server",
+            "displayName": "ricochet (RPM)",
+            "description": "Server package",
+            "configurePreset": "static-relwithdebinfo",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            },
+            "variables": {
+                "CPACK_COMPONENTS_ALL": "server_files",
+                "CPACK_RPM_PACKAGE_SUMMARY": "Ricochet relay server",
+                "CPACK_RPM_PACKAGE_DESCRIPTION": "Ricochet relay server executable.",
+                "CPACK_RPM_PACKAGE_VENDOR": "Community"
+            },
+            "generators": [
+                "RPM"
+            ],
+            "configurations": [
+                "RelWithDebInfo"
+            ],
+            "packageName": "ricochet",
+            "packageDirectory": ".."
+        },
+        {
+            "name": "linux-client",
+            "displayName": "libricochet (RPM)",
+            "description": "Client package",
+            "configurePreset": "static-relwithdebinfo",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            },
+            "variables": {
+                "CPACK_COMPONENTS_ALL": "client_files",
+                "CPACK_RPM_PACKAGE_REQUIRES": "boost-devel, openssl-devel",
+                "CPACK_RPM_PACKAGE_SUMMARY": "Client for Ricochet relay server",
+                "CPACK_RPM_PACKAGE_DESCRIPTION": "C++ client library for Ricochet relay server.",
+                "CPACK_INSTALL_CMAKE_PROJECTS": "../static-relwithdebinfo;tubus;ALL;/;../shared-relwithdebinfo;tubus;ALL;/",
+                "CPACK_RPM_PACKAGE_VENDOR": "Community"
+            },
+            "generators": [
+                "RPM"
+            ],
+            "configurations": [
+                "RelWithDebInfo"
+            ],
+            "packageName": "libricochet",
+            "packageDirectory": ".."
+        },
+        {
+            "name": "server-archive",
+            "displayName": "ricochet (ZIP)",
+            "description": "Server archive",
+            "configurePreset": "static-relwithdebinfo",
+            "generators": [
+                "ZIP"
+            ],
+            "configurations": [
+                "RelWithDebInfo"
+            ],
+            "variables": {
+                "CPACK_COMPONENTS_ALL": "server_files"
+            },
+            "packageName": "ricochet",
+            "packageDirectory": ".."
+        },
+        {
+            "name": "client-archive",
+            "displayName": "libricochet (ZIP)",
+            "description": "Client archive",
+            "configurePreset": "static-relwithdebinfo",
+            "generators": [
+                "ZIP"
+            ],
+            "configurations": [
+                "RelWithDebInfo"
+            ],
+            "variables": {
+                "CPACK_COMPONENTS_ALL": "client_files",
+                "CPACK_INSTALL_CMAKE_PROJECTS": "../static-relwithdebinfo;tubus;ALL;/;../shared-relwithdebinfo;tubus;ALL;/"
+            },
+            "packageName": "libricochet",
+            "packageDirectory": ".."
+        }
+    ],
+    "workflowPresets": [
+        {
+            "name": "archives",
+            "displayName": "ZIP archives",
+            "description": "Server and client archives",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "static-relwithdebinfo"
+                },
+                {
+                    "type": "build",
+                    "name": "static-relwithdebinfo"
+                },
+                {
+                    "type": "test",
+                    "name": "static-relwithdebinfo"
+                },
+                {
+                    "type": "package",
+                    "name": "server-archive"
+                },
+                {
+                    "type": "package",
+                    "name": "client-archive"
+                }
+            ]
+        },
+        {
+            "name": "debian",
+            "displayName": "Debian packages",
+            "description": "Server and client packages",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "static-relwithdebinfo"
+                },
+                {
+                    "type": "build",
+                    "name": "static-relwithdebinfo"
+                },
+                {
+                    "type": "test",
+                    "name": "static-relwithdebinfo"
+                },
+                {
+                    "type": "package",
+                    "name": "debian-server"
+                },
+                {
+                    "type": "package",
+                    "name": "debian-client"
+                }
+            ]
+        }
+    ]
+}

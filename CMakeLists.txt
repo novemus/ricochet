@@ -73,12 +73,12 @@ if (NOT CMAKE_SKIP_INSTALL_RULES)
     configure_package_config_file(cmake/ricochet-config.cmake.in ricochet-config.cmake INSTALL_DESTINATION "${RICICHET_INSTALL_CMAKEDIR}")
     write_basic_package_version_file(ricochet-config-version.cmake COMPATIBILITY SameMajorVersion)
 
-    install(TARGETS ricochet RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}" COMPONENT binary_files)
+    install(TARGETS ricochet RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}" COMPONENT server_files)
 
     install(TARGETS libricochet EXPORT ricochet_export
-        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}" COMPONENT runtime_files
-        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT library_files
-        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT archive_files
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}" COMPONENT client_files
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT client_files
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}" COMPONENT client_files
         INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 
     set(TARGET_FILE ricochet-shared-targets.cmake)
@@ -98,20 +98,20 @@ if (NOT CMAKE_SKIP_INSTALL_RULES)
         COMPONENT cmake_files
         DESTINATION "${RICICHET_INSTALL_CMAKEDIR}")
 
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/export.h" "src/proto.h" "src/agent.h" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ricochet" COMPONENT header_files)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/export.h" "src/proto.h" "src/agent.h" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ricochet" COMPONENT client_files)
 
     if(MSVC)
-        install(FILES "$<TARGET_PDB_FILE:ricochet>" COMPONENT pdb_files
+        install(FILES "$<TARGET_PDB_FILE:ricochet>" COMPONENT server_files
             CONFIGURATIONS Debug RelWithDebInfo
             DESTINATION "${CMAKE_INSTALL_LIBDIR}"
             OPTIONAL)
         if(BUILD_SHARED_LIBS)
-            install(FILES "$<TARGET_PDB_FILE:libricochet>" COMPONENT pdb_files
+            install(FILES "$<TARGET_PDB_FILE:libricochet>" COMPONENT client_files
                 CONFIGURATIONS Debug RelWithDebInfo
                 DESTINATION "${CMAKE_INSTALL_LIBDIR}"
                 OPTIONAL)
         else()
-            install(FILES "$<TARGET_FILE_DIR:libricochet>/$<TARGET_FILE_PREFIX:libricochet>$<TARGET_FILE_BASE_NAME:libricochet>-static.pdb" COMPONENT pdb_files
+            install(FILES "$<TARGET_FILE_DIR:libricochet>/$<TARGET_FILE_PREFIX:libricochet>$<TARGET_FILE_BASE_NAME:libricochet>-static.pdb" COMPONENT client_files
                 CONFIGURATIONS Debug RelWithDebInfo
                 DESTINATION "${CMAKE_INSTALL_LIBDIR}"
                 OPTIONAL)
@@ -168,6 +168,8 @@ if(NOT CMAKE_SKIP_INSTALL_RULES)
         "${CMAKE_CURRENT_SOURCE_DIR}/CHANGELOG.md"
         )
 
+    install(FILES ${DEVEL_DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/libricochet" COMPONENT client_files)
+
     if (CMAKE_HOST_SYSTEM_NAME MATCHES "Linux")
         set(CPACK_COMPONENTS_ALL_IN_ONE_PACKAGE ON)
         cmake_host_system_information(RESULT DISTR QUERY DISTRIB_ID)
@@ -184,13 +186,8 @@ if(NOT CMAKE_SKIP_INSTALL_RULES)
                 "${CMAKE_CURRENT_SOURCE_DIR}/linux/copyright"
                 "${CMAKE_CURRENT_SOURCE_DIR}/linux/README.Debian"
                 )
-            install(FILES ${DEBIAN_DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/ricochet" COMPONENT bin_deb_files)
-            if(BUILD_SHARED_LIBS)
-                install(FILES ${DEBIAN_DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/libricochet" COMPONENT lib_deb_files)
-            else()
-                install(FILES ${DEBIAN_DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/libricochet-dev" COMPONENT dev_deb_files)
-                install(FILES ${DEVEL_DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/libricochet-dev" COMPONENT dev_doc_files)
-            endif()
+            install(FILES ${DEBIAN_DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/ricochet" COMPONENT server_files)
+            install(FILES ${DEBIAN_DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/libricochet" COMPONENT client_files)
         else()
             cmake_host_system_information(RESULT DISTR_VERSION QUERY DISTRIB_VERSION_ID)
             if (DISTR MATCHES "fedora")
@@ -202,18 +199,36 @@ if(NOT CMAKE_SKIP_INSTALL_RULES)
                 set(CPACK_RPM_PACKAGE_RELEASE "${CPACK_PACKAGE_RELEASE}")
             endif()
 
-            if(NOT BUILD_SHARED_LIBS)
-                install(FILES ${DEVEL_DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/libricochet-devel" COMPONENT dev_doc_files)
-            endif()
-
             set(CPACK_RPM_FILE_NAME RPM-DEFAULT)
             set(CPACK_RPM_PACKAGE_AUTOREQ "1")
             set(CPACK_RPM_PACKAGE_LICENSE "Apache 2.0")
             set(CPACK_RPM_COMPONENT_INSTALL ON)
             set(CPACK_RPM_BUILD_SOURCE_DIRS_PREFIX "/src/ricochet")
         endif()
-    elseif(NOT BUILD_SHARED_LIBS)
-        install(FILES ${DEVEL_DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/libricochet" COMPONENT dev_doc_files)
+    elseif(CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
+        if (CMAKE_BUILD_TYPE MATCHES "Debug" OR CMAKE_BUILD_TYPE MATCHES "RelWithDebInfo")
+            find_program(DSYMUTIL_EXE dsymutil)
+            find_program(STRIP_EXE strip)
+
+            add_custom_command(
+                TARGET ricochet
+                POST_BUILD
+                COMMAND ${DSYMUTIL_EXE} $<TARGET_FILE:ricochet>
+                COMMAND ${STRIP_EXE} -S $<TARGET_FILE:ricochet>
+                )
+
+            add_custom_command(
+                TARGET libricochet
+                POST_BUILD
+                COMMAND ${DSYMUTIL_EXE} $<TARGET_FILE:libricochet>
+                COMMAND ${STRIP_EXE} -S $<TARGET_FILE:libricochet>
+                )
+
+            install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/ricochet.dSYM" DESTINATION "dSYMs" COMPONENT server_files)
+            install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/libricochet.dSYM" DESTINATION "dSYMs" COMPONENT client_files)
+
+            set(CPACK_ARCHIVE_COMPONENT_INSTALL ON)
+        endif()
     endif()
 
     string(TOLOWER "${PROJECT_NAME}-${PROJECT_VERSION}-${CPACK_PACKAGE_RELEASE}-${CMAKE_HOST_SYSTEM_NAME}-${CMAKE_HOST_SYSTEM_PROCESSOR}" CPACK_ARCHIVE_FILE_NAME)

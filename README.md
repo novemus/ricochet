@@ -2,7 +2,7 @@
 
 [Ricochet](https://github.com/novemus/ricochet) is a relay server and C++ client library for bridging UDP/TCP applications that cannot connect directly due to strict firewall rules or NAT constraints.
 
-It works similarly to a TURN relay, but unlike TURN it is not tied to multimedia protocols — it can relay raw UDP or TCP data for any type of application.
+It works similarly to a TURN relay, but unlike TURN it is not tied to multimedia protocols — it can relay raw UDP or TCP data transparently for any type of application.
 
 A typical scenario is the connection of peers when one of them located behind a symmetric NAT. For success, in that case another peer must have no NAT or Full Cone NAT filtering. If these conditions are not met, then you need a relay.
 
@@ -11,8 +11,8 @@ A typical scenario is the connection of peers when one of them located behind a 
 Peers must coordinate connection via some rendezvous service. Peer with bad NAT must act as a `client`, another one can be `server` or `client`. No matter who acts as a relay initiator.
 
 1. **Relay allocation** — the relay initiator requests a relay endpoint from the server, specifying the desired protocol (UDP/TCP, IPv4/IPv6). The server returns the allocated address and port.
-2. **Peer coordination** — relay initiator negotiates connection roles and startup synchronization with peers and passes them the relay endpoint via a rendezvous service.
-3. **Relay launch** — the relay initiator forwards to the server the description (endpoints and roles) of both peers. The relay then accepts connections from the `client` peer, attempts to connect to the `server` peer, and begins transparent data forwarding once both sides are connected.
+2. **Peer coordination** — relay initiator negotiates peer roles and synchronization with peers and passes them the relay endpoint via a rendezvous service.
+3. **Relay launch** — the relay initiator forwards to the server the description (endpoints and roles) of peers. The relay starts to accept connections from the `client` peer(s), attempts to connect to the `server` peer, and begins data forwarding once both sides are connected.
 
 Endpoint of the `server` peer must be defined, but the `client` peer endpoint used by the relay as an accept filter and can be defined partially or undefined at all.
 
@@ -42,7 +42,7 @@ $ cmake --build ./build --target install
 
 ### Certificate Setup
 
-The server uses mTLS. You can rely on your own PKI infrastructure to issue certificates, or use preshared self-signed certificates. In the latter case, the client must use the server certificate as a CA, and the server must store client certificates in a local repository with the following structure:
+Server requires mTLS. You can rely on your own PKI infrastructure to issue certificates, or use preshared self-signed certificates. In the latter case, the client must use the server certificate as a CA, and the server must store client certificates in a local repository with the following structure:
 
 ```console
 repo/
@@ -61,19 +61,20 @@ Accepted file extensions: `.pem` and `.crt`.
 ### Running the Server
 
 ```console
-$ ./ricochet
+$ ./ricochet --help
+$ ./ricochet --bind-addr=0.0.0.0 --bind-port=4433 --cert-file=server.pem --key-file=server.key --ca-file=ca.pem --repo-path=./repo
 ```
 
 Server options:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--bind-addr` | `0.0.0.0` | IP address to bind the server |
-| `--bind-port` | `4433` | Port to bind the server |
-| `--cert-file` | `server.pem` | Path to the server SSL certificate |
-| `--key-file` | `server.key` | Path to the SSL private key |
-| `--ca-file` | `ca.pem` | Path to the CA certificate |
-| `--repo-path` | `.` | Path to the client certificate repository |
+| `--bind-addr` | `0.0.0.0` | Listen address |
+| `--bind-port` | `4433` | Listen port |
+| `--cert-file` | `server.pem` | Server certificate |
+| `--key-file` | `server.key` | Server private key |
+| `--ca-file` | `ca.pem` | CA for client verification |
+| `--repo-path` | `.` | Client certificate repository |
 | `--idle-time` | `300` | Idle session timeout in seconds |
 | `--client-limit` | `10` | Maximum sessions per client |
 | `--total-limit` | `100` | Maximum concurrent sessions |
@@ -82,7 +83,7 @@ Server options:
 
 ### Client API
 
-Brief interface overview:
+**Interface:**
 
 ```cpp
 #include <boost/asio.hpp>
@@ -108,9 +109,9 @@ std::shared_ptr<agent> create_agent(const boost::asio::ip::tcp::endpoint& server
 
 **Workflow:**
 
-1. Call `assign_relay` with the desired protocol. The server returns an allocated relay endpoint or throws an exception (`unavailable_proto`, `limit_reached`).
-2. Define peer roles and forward them with the realay endpoint to both peers via a rendezvous service. If some peer uses the `server` role, it must start accepting connections on the relay endpoint beforehand.
-3. Call `launch_relay` with the description of both peers. The relay starts accepting connections from `client` peers, makes several attempts to connect to the `server` peer, and begins transparent data forwarding once the connection is established.
+1. Call `assign_relay` with the desired protocol. The server will return an allocated relay endpoint or throws an exception (`unavailable_proto`, `limit_reached`).
+2. Define peer roles and forward them with the relay endpoint to both peers via a rendezvous service. If some peer uses the `server` role, it must start accepting connections on the relay endpoint beforehand.
+3. Call `launch_relay` with the description of both peers. The relay will start accepting connections from `client` peers, make several attempts to connect to the `server` peer, and begin data forwarding once the connection is established.
 
 See the header files [agent.h](src/agent.h) and [proto.h](src/proto.h) for details.
 
