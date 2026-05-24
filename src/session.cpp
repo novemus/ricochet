@@ -11,10 +11,10 @@ session::session(boost::asio::io_context& io,
     : m_io(io)
     , m_ssl(ssl)
     , m_socket(std::move(socket))
-    , m_strand(m_io)
     , m_timer(m_io)
     , m_idle(idle)
     , m_query(4096)
+    , m_break(false)
 {
     _trc_("Session " << this << " created");
 }
@@ -25,44 +25,42 @@ session::~session()
     do_close();
 }
 
-void session::set_cleaner(cleanup_function clean)
+void session::start(bool reject, cleanup_function clean)
 {
-    m_strand.post([this, weak = weak_from_this(), clean]()
-    {
-        if (auto self = weak.lock())
-        {
-            m_clean = clean;
-        }
-    });
-}
+    _inf_ << "Session " << this << (reject ? " reject..." : " start...");
 
-void session::start()
-{
-    _inf_ << "Session " << this << " started";
-    do_read_header();
+    m_io.post([this, weak = weak_from_this(), reject, clean]()
+    {
+        auto self = weak.lock();
+        if (!self)
+            return;
+
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        m_clean = clean;
+
+        if (reject)
+            send_error_reply(ricochet::failure::limit_reached);
+        else
+            do_read_header();
+    });
 }
 
 void session::close()
 {
-    _inf_ << "Session " << this << " closing...";
-    m_strand.post([weak = weak_from_this()]()
-    {
-        if (auto self = weak.lock())
-        {
-            self->do_close();
-        }
-    });
-}
+    _inf_ << "Session " << this << " close...";
 
-void session::error(ricochet::failure error)
-{
-    _wrn_ << "Session " << this << " error: " << error;
-    m_strand.post([weak = weak_from_this(), error]()
+    m_io.post([this, weak = weak_from_this()]()
     {
-        if (auto self = weak.lock())
-        {
-            self->send_error_reply(error);
-        }
+        auto self = weak.lock();
+        if (!self)
+            return;
+
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_break = true;
+
+        boost::system::error_code ec;
+        m_socket.lowest_layer().cancel(ec);
     });
 }
 
@@ -71,12 +69,6 @@ void session::do_close()
     boost::system::error_code ec;
     m_timer.cancel(ec);
 
-    if (m_relay)
-    {
-        m_relay->close();
-        m_relay.reset();
-    }
-
     if (m_socket.lowest_layer().is_open())
     {
         _inf_ << "Session " << this << " closed";
@@ -84,6 +76,12 @@ void session::do_close()
         boost::system::error_code ec;
         m_socket.lowest_layer().shutdown(boost::asio::socket_base::shutdown_type::shutdown_both, ec);
         m_socket.lowest_layer().close(ec);
+    }
+
+    if (m_relay)
+    {
+        m_relay->close();
+        m_relay.reset();
     }
 
     if (m_clean)
@@ -95,62 +93,49 @@ void session::do_close()
 
 void session::do_shutdown()
 {
+    _inf_ << "Session " << this << " shutdown...";
+
     boost::system::error_code ec;
     m_timer.cancel(ec);
 
-    if (m_socket.lowest_layer().is_open())
+    auto finalize = [this, weak = weak_from_this()](const boost::system::error_code& err)
     {
-        auto finalize = [this, weak = weak_from_this()](const boost::system::error_code& err)
-        {
-            auto self = weak.lock();
-            if (!self)
-                return;
+        auto self = weak.lock();
+        if (!self)
+            return;
 
-            _inf_ << "Session " << this << " shutdown" << (err ? ": "  + err.message() : "");
+        _inf_ << "Session " << this << " shutdown" << (err ? ": "  + err.message() : "");
 
-            boost::system::error_code ec;
-            m_socket.lowest_layer().shutdown(boost::asio::socket_base::shutdown_type::shutdown_both, ec);
-            m_socket.lowest_layer().close(ec);
+        std::lock_guard<std::mutex> lock(m_mutex);
+        do_close();
+    };
 
-            if (m_relay)
-            {
-                m_relay->close();
-                m_relay.reset();
-            }
-
-            if (m_clean)
-            {
-                m_clean();
-                m_clean = nullptr;
-            }
-        };
-
-        m_timer.expires_from_now(boost::posix_time::seconds(2));
-        m_timer.async_wait(m_strand.wrap(finalize));
-        m_socket.async_shutdown(m_strand.wrap(finalize));
-    }
-    else if (m_clean)
-    {
-        m_clean();
-        m_clean = nullptr;
-    }
+    m_timer.expires_from_now(boost::posix_time::seconds(2));
+    m_timer.async_wait(finalize);
+    m_socket.async_shutdown(finalize);
 }
 
 void session::do_read_header()
 {
     start_timer();
     m_socket.async_read_some(boost::asio::buffer(m_query.data(), query::header_size),
-        m_strand.wrap([this, weak = weak_from_this()](const boost::system::error_code& ec, std::size_t size)
+        [this, weak = weak_from_this()](const boost::system::error_code& ec, std::size_t size)
         {
             auto self = weak.lock();
             if (!self)
                 return;
 
+            std::lock_guard<std::mutex> lock(m_mutex);
+
             if (!ec)
             {
                 _trc_("Session " << this << " read header: " << m_query.dump(0, size));
 
-                if (size == query::header_size)
+                if (m_break)
+                {
+                    do_close();
+                }
+                else if (size == query::header_size)
                 {
                     if (m_relay && m_query.type() != ricochet::query::kind::connect)
                     {
@@ -178,24 +163,30 @@ void session::do_read_header()
                 _wrn_ << "Session " << this << " failed to read header: " << ec.message();
                 do_close();
             }
-        }));
+        });
 }
 
 void session::do_read_payload()
 {
     start_timer();
     m_socket.async_read_some(boost::asio::buffer(m_query.data() + query::header_size, m_query.length()),
-        m_strand.wrap([this, weak = weak_from_this()](const boost::system::error_code& ec, std::size_t size)
+        [this, weak = weak_from_this()](const boost::system::error_code& ec, std::size_t size)
         {
             auto self = weak.lock();
             if (!self)
                 return;
 
+            std::lock_guard<std::mutex> lock(m_mutex);
+
             if (!ec)
             {
                 _trc_("Session " << this << " read payload: " << m_query.dump(query::header_size, size));
 
-                if (size == m_query.length())
+                if (m_break)
+                {
+                    do_close();
+                }
+                else if (size == m_query.length())
                 {
                     handle_query();
                 }
@@ -213,7 +204,7 @@ void session::do_read_payload()
                 _wrn_ << "Session " << this << " failed to read payload: " << ec.message();
                 do_close();
             }
-        }));
+        });
 }
 
 void session::handle_query()
@@ -255,15 +246,21 @@ void session::do_write(const ricochet::reply& msg)
 {
     start_timer();
     boost::asio::async_write(m_socket, boost::asio::buffer(msg.data(), msg.size()),
-        m_strand.wrap([this, weak = weak_from_this(), msg](const boost::system::error_code& ec, std::size_t)
+        [this, weak = weak_from_this(), msg](const boost::system::error_code& ec, std::size_t)
         {
             auto self = weak.lock();
             if (!self)
                 return;
 
+            std::lock_guard<std::mutex> lock(m_mutex);
+
             if (ec)
             {
                 _err_ << "Session " << this << " failed to write reply: " << ec.message();
+                do_close();
+            }
+            else if (m_break)
+            {
                 do_close();
             }
             else if (msg.type() == ricochet::reply::kind::binding)
@@ -278,7 +275,7 @@ void session::do_write(const ricochet::reply& msg)
             {
                 do_shutdown();
             }
-        }));
+        });
 }
 
 void session::handle_provide_query()
@@ -371,7 +368,7 @@ void session::send_error_reply(ricochet::failure error)
 void session::start_timer()
 {
     m_timer.expires_from_now(m_idle);
-    m_timer.async_wait(m_strand.wrap([this, weak = weak_from_this()](const boost::system::error_code& ec)
+    m_timer.async_wait([this, weak = weak_from_this()](const boost::system::error_code& ec)
     {
         auto self = weak.lock();
         if (!self)
@@ -380,9 +377,14 @@ void session::start_timer()
         if (!ec)
         {
             _inf_ << "Session " << this << " idle timeout";
-            do_close();
+
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_break = true;
+
+            boost::system::error_code ec;
+            m_socket.lowest_layer().cancel(ec);
         }
-    }));
+    });
 }
 
 }

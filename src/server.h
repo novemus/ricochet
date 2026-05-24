@@ -49,13 +49,13 @@ public:
 
     server(boost::asio::io_context& io, const config& cfg);
 
-    void accept();
+    void start();
     void stop();
 
 private:
 
-    void do_accept();
-    bool check_limits(const std::string& client);
+    void accept();
+    bool check_limits(const std::string& client) const;
 };
 
 } // namespace ricochet

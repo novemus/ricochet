@@ -11,6 +11,23 @@
 
 class integration_test_fixture
 {
+    struct context
+    {
+        std::filesystem::path repo;
+        std::filesystem::path ca_cert;
+        std::filesystem::path client_cert;
+        std::filesystem::path client_self_cert;
+        std::filesystem::path client_key;
+        std::filesystem::path server_cert;
+        std::filesystem::path server_self_cert;
+        std::filesystem::path server_key;
+
+        context();
+        ~context();
+    };
+
+    context& get_test_context() { static context s_context; return s_context; }
+
 public:
 
     integration_test_fixture();
@@ -19,7 +36,6 @@ public:
     std::shared_ptr<ricochet::server> create_server(bool using_ca = true, size_t client_limit = 2, size_t total_limit = 4);
     std::shared_ptr<ricochet::client> create_client(bool using_ca = true);
     std::shared_ptr<ricochet::agent> create_agent(bool using_ca = true);
-
     boost::asio::io_context& get_io_context() { return m_io; }
 
 private:
@@ -27,13 +43,4 @@ private:
     boost::asio::io_context m_io;
     boost::asio::executor_work_guard<boost::asio::io_context::executor_type> m_work;
     boost::asio::thread_pool m_pool;
-    boost::asio::ip::tcp::endpoint m_server;
-    std::filesystem::path m_repo;
-    std::filesystem::path m_ca_cert;
-    std::filesystem::path m_client_cert;
-    std::filesystem::path m_client_self_cert;
-    std::filesystem::path m_client_key;
-    std::filesystem::path m_server_cert;
-    std::filesystem::path m_server_self_cert;
-    std::filesystem::path m_server_key;
 };

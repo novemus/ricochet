@@ -11,7 +11,7 @@ BOOST_AUTO_TEST_CASE(udp4_relay)
         auto server = create_server(true);
         auto agent = create_agent(true);
 
-        BOOST_REQUIRE_NO_THROW(server->accept());
+        BOOST_REQUIRE_NO_THROW(server->start());
 
         try
         {
@@ -48,7 +48,7 @@ BOOST_AUTO_TEST_CASE(tcp4_relay)
         auto server = create_server(true);
         auto agent = create_agent(true);
 
-        BOOST_REQUIRE_NO_THROW(server->accept());
+        BOOST_REQUIRE_NO_THROW(server->start());
 
         try
         {
@@ -85,7 +85,7 @@ BOOST_AUTO_TEST_CASE(reuse_agent)
         auto server = create_server(false);
         auto agent = create_agent(false);
 
-        BOOST_REQUIRE_NO_THROW(server->accept());
+        BOOST_REQUIRE_NO_THROW(server->start());
 
         try
         {

@@ -12,7 +12,7 @@ BOOST_AUTO_TEST_CASE(client_connect_with_ca)
         auto server = create_server(true);
         auto client = create_client(true);
 
-        BOOST_REQUIRE_NO_THROW(server->accept());
+        BOOST_REQUIRE_NO_THROW(server->start());
         BOOST_REQUIRE_NO_THROW(client->connect(yield));
 
         BOOST_REQUIRE_NO_THROW(client->shutdown(yield));
@@ -30,7 +30,7 @@ BOOST_AUTO_TEST_CASE(client_connect_without_ca)
         auto server = create_server(false);
         auto client = create_client(false);
 
-        BOOST_REQUIRE_NO_THROW(server->accept());
+        BOOST_REQUIRE_NO_THROW(server->start());
         BOOST_REQUIRE_NO_THROW(client->connect(yield));
 
         BOOST_REQUIRE_NO_THROW(client->shutdown(yield));
@@ -48,7 +48,7 @@ BOOST_AUTO_TEST_CASE(udp4_relay_session)
         auto server = create_server(true);
         auto client = create_client(true);
 
-        BOOST_REQUIRE_NO_THROW(server->accept());
+        BOOST_REQUIRE_NO_THROW(server->start());
         BOOST_REQUIRE_NO_THROW(client->connect(yield));
 
         BOOST_REQUIRE_NO_THROW(client->write_query(yield, ricochet::query::make_provide_query(ricochet::protocol::udp4)));
@@ -98,7 +98,7 @@ BOOST_AUTO_TEST_CASE(udp6_relay_session)
         auto server = create_server(true);
         auto client = create_client(true);
 
-        BOOST_REQUIRE_NO_THROW(server->accept());
+        BOOST_REQUIRE_NO_THROW(server->start());
         BOOST_REQUIRE_NO_THROW(client->connect(yield));
 
         BOOST_REQUIRE_NO_THROW(client->write_query(yield, ricochet::query::make_provide_query(ricochet::protocol::udp6)));
@@ -146,7 +146,7 @@ BOOST_AUTO_TEST_CASE(multiple_client_sessions)
     auto fut = boost::asio::spawn(get_io_context(), [&](boost::asio::yield_context yield)
     {
         auto server = create_server(false, 4, 8);
-        BOOST_REQUIRE_NO_THROW(server->accept());
+        BOOST_REQUIRE_NO_THROW(server->start());
         
         std::vector<std::pair<std::shared_ptr<ricochet::client>, ricochet::protocol>> pool = {
             { create_client(false), ricochet::protocol::udp4 },
@@ -210,7 +210,7 @@ BOOST_AUTO_TEST_CASE(client_relay_limit)
     auto fut = boost::asio::spawn(get_io_context(), [&](boost::asio::yield_context yield)
     {
         auto server = create_server(true);
-        BOOST_REQUIRE_NO_THROW(server->accept());
+        BOOST_REQUIRE_NO_THROW(server->start());
 
         std::vector<std::shared_ptr<ricochet::client>> pool = {
             create_client(true),
@@ -263,7 +263,7 @@ BOOST_AUTO_TEST_CASE(total_relay_limit)
     auto fut = boost::asio::spawn(get_io_context(), [&](boost::asio::yield_context yield)
     {
         auto server = create_server(false, 4, 2);
-        BOOST_REQUIRE_NO_THROW(server->accept());
+        BOOST_REQUIRE_NO_THROW(server->start());
         
         std::vector<std::shared_ptr<ricochet::client>> pool = {
             create_client(false),
@@ -318,7 +318,7 @@ BOOST_AUTO_TEST_CASE(client_malformed_message)
         auto server = create_server(true);
         auto client = create_client(true);
 
-        BOOST_REQUIRE_NO_THROW(server->accept());
+        BOOST_REQUIRE_NO_THROW(server->start());
         BOOST_REQUIRE_NO_THROW(client->connect(yield));
 
         BOOST_REQUIRE_NO_THROW(client->write_query(yield, ricochet::query::make_provide_query(ricochet::protocol::udp4)));
@@ -361,7 +361,7 @@ BOOST_AUTO_TEST_CASE(undefined_server_port)
         auto server = create_server(true);
         auto client = create_client(true);
 
-        BOOST_REQUIRE_NO_THROW(server->accept());
+        BOOST_REQUIRE_NO_THROW(server->start());
         BOOST_REQUIRE_NO_THROW(client->connect(yield));
 
         BOOST_REQUIRE_NO_THROW(client->write_query(yield, ricochet::query::make_provide_query(ricochet::protocol::udp4)));
@@ -413,7 +413,7 @@ BOOST_AUTO_TEST_CASE(undefined_server_address)
         auto server = create_server(true);
         auto client = create_client(true);
 
-        BOOST_REQUIRE_NO_THROW(server->accept());
+        BOOST_REQUIRE_NO_THROW(server->start());
         BOOST_REQUIRE_NO_THROW(client->connect(yield));
 
         BOOST_REQUIRE_NO_THROW(client->write_query(yield, ricochet::query::make_provide_query(ricochet::protocol::udp4)));
@@ -463,7 +463,7 @@ BOOST_AUTO_TEST_CASE(wrong_connect_query)
         auto server = create_server(true);
         auto client = create_client(true);
 
-        BOOST_REQUIRE_NO_THROW(server->accept());
+        BOOST_REQUIRE_NO_THROW(server->start());
         BOOST_REQUIRE_NO_THROW(client->connect(yield));
 
         BOOST_REQUIRE_NO_THROW(client->write_query(yield, ricochet::query::make_provide_query(ricochet::protocol::tcp4)));
@@ -513,7 +513,7 @@ BOOST_AUTO_TEST_CASE(server_idle_timeout)
         auto server = create_server(true);
         auto client = create_client(true);
 
-        BOOST_REQUIRE_NO_THROW(server->accept());
+        BOOST_REQUIRE_NO_THROW(server->start());
         BOOST_REQUIRE_NO_THROW(client->connect(yield));
 
         BOOST_REQUIRE_NO_THROW(client->write_query(yield, ricochet::query::make_provide_query(ricochet::protocol::udp4)));

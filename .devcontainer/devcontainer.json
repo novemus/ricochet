@@ -2,5 +2,10 @@
 	"name": "C++",
 	"build": {
 		"dockerfile": "Dockerfile"
+	},
+	"runArgs": ["--hostname", "bookworm"],
+	"containerEnv": {
+		"TARGET_OS": "debian-bookworm",
+		"TARGET_ARCH": "x64"
 	}
 }

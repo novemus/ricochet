@@ -95,7 +95,7 @@ int main(int argc, char* argv[])
         _inf_ << "Max total sessions: " << config.total_relay_limit;
         _inf_ << "Using " << thread_count << " worker threads";
 
-        server.accept();
+        server.start();
 
         std::vector<std::thread> workers;
         for (unsigned int i = 1; i < thread_count; ++i)

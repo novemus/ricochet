@@ -17,7 +17,7 @@ if(NOT DEFINED CMAKE_VISIBILITY_INLINES_HIDDEN)
     set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 endif()
 
-find_package(Boost 1.74 CONFIG REQUIRED COMPONENTS system unit_test_framework program_options coroutine log)
+find_package(Boost 1.81 CONFIG REQUIRED COMPONENTS system unit_test_framework program_options coroutine log)
 find_package(OpenSSL REQUIRED)
 
 include_directories(${CMAKE_SOURCE_DIR})

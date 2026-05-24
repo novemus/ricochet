@@ -14,12 +14,13 @@ class session : public std::enable_shared_from_this<session>
     boost::asio::io_context& m_io;
     std::shared_ptr<boost::asio::ssl::context> m_ssl;
     boost::asio::ssl::stream<boost::asio::ip::tcp::socket> m_socket;
-    boost::asio::io_context::strand m_strand;
     boost::asio::deadline_timer m_timer;
     boost::posix_time::seconds m_idle;
     std::shared_ptr<ricochet::relay> m_relay;
     ricochet::query m_query;
     cleanup_function m_clean;
+    bool m_break;
+    std::mutex m_mutex;
 
 public:
 
@@ -27,12 +28,10 @@ public:
             std::shared_ptr<boost::asio::ssl::context> ssl,
             boost::asio::ssl::stream<boost::asio::ip::tcp::socket> socket,
             boost::posix_time::seconds idle);
-
     ~session();
-    void start();
+
+    void start(bool reject, cleanup_function clean);
     void close();
-    void error(ricochet::failure err);
-    void set_cleaner(cleanup_function clean);
 
 private:
 
