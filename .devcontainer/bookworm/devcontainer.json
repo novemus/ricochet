@@ -1,5 +1,5 @@
 {
-	"name": "C++",
+	"name": "Bookworm C++",
 	"build": {
 		"dockerfile": "Dockerfile"
 	},

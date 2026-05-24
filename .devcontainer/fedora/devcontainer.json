@@ -1,0 +1,17 @@
+{
+    "name": "Fedora C++",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+	"runArgs": ["--hostname", "fedora"],
+	"containerEnv": {
+		"TARGET_OS": "fedora-42",
+		"TARGET_ARCH": "x64"
+	},
+    "customizations": {
+        "vscode": {
+            "extensions": ["ms-vscode.cpptools", "ms-vscode.cmake-tools"]
+        }
+    },
+    "remoteUser": "root"
+}

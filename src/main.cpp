@@ -15,7 +15,7 @@ int main(int argc, char* argv[])
 {
     try
     {
-        po::options_description desc("Ricochet relay server options");
+        po::options_description desc("Ricochet relay server options", 200, 100);
         desc.add_options()
             ("help", "show help message")
             ("bind-addr", po::value<std::string>()->default_value("0.0.0.0"), "listen address")

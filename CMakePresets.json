@@ -218,7 +218,7 @@
             },
             "variables": {
                 "CPACK_COMPONENTS_ALL": "client_files",
-                "CPACK_DEBIAN_PACKAGE_DEPENDS": "libboost-dev (>= 1.81)",
+                "CPACK_DEBIAN_PACKAGE_DEPENDS": "libboost-dev (>= 1.81) | libboost1.81-dev",
                 "CPACK_PACKAGE_DESCRIPTION_SUMMARY": "Client for Ricochet relay server",
                 "CPACK_PACKAGE_DESCRIPTION": "C++ client library for Ricochet relay server.",
                 "CPACK_INSTALL_CMAKE_PROJECTS": "../static-relwithdebinfo;tubus;ALL;/;../shared-relwithdebinfo;tubus;ALL;/",
@@ -323,7 +323,7 @@
     ],
     "workflowPresets": [
         {
-            "name": "archives",
+            "name": "zip-archives",
             "displayName": "ZIP archives",
             "description": "Server and client archives",
             "steps": [
@@ -350,8 +350,8 @@
             ]
         },
         {
-            "name": "debian",
-            "displayName": "Debian packages",
+            "name": "debian-packages",
+            "displayName": "DEB packages",
             "description": "Server and client packages",
             "steps": [
                 {
@@ -373,6 +373,33 @@
                 {
                     "type": "package",
                     "name": "debian-client"
+                }
+            ]
+        },
+        {
+            "name": "rpm-packages",
+            "displayName": "RPM packages",
+            "description": "Server and client packages",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "static-relwithdebinfo"
+                },
+                {
+                    "type": "build",
+                    "name": "static-relwithdebinfo"
+                },
+                {
+                    "type": "test",
+                    "name": "static-relwithdebinfo"
+                },
+                {
+                    "type": "package",
+                    "name": "linux-server"
+                },
+                {
+                    "type": "package",
+                    "name": "linux-client"
                 }
             ]
         }
