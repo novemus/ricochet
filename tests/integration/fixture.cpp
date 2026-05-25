@@ -1,87 +1,37 @@
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 #include <filesystem>
-#include <boost/process.hpp>
 #include <random>
 #include <string>
-#include <openssl/x509.h>
-#include <openssl/pem.h>
-#include <openssl/evp.h>
 #include "fixture.h"
 
-namespace fs = std::filesystem;
-namespace bp = boost::process;
-
-integration_test_fixture::context::context() : repo(fs::temp_directory_path() / ("ricochet_server_test_"  + std::to_string(std::random_device{}())) / "repo")
+integration_test_fixture::context::context() 
+    : repo(std::filesystem::temp_directory_path() / ("ricochet_server_test_"  + std::to_string(std::random_device{}())) / "repo")
 {
-    std::filesystem::path ca_key = repo.parent_path() / "ca.key";
-    std::filesystem::path server_csr = repo.parent_path() / "server.csr";
-    std::filesystem::path client_csr = repo / "test_client" / "localhost" / "client.csr";
-
     ca_cert = repo.parent_path() / "ca.crt";
     server_cert = repo.parent_path() / "server.crt";
     server_self_cert = repo.parent_path() / "server.pem";
     server_key = repo.parent_path() / "server.key";
-    client_cert = repo / "test_client" / "localhost" / "cert.crt";
-    client_self_cert = repo / "test_client" / "localhost" / "cert.pem";
-    client_key = repo / "test_client" / "localhost" / "private.key";
+    client_cert = repo / "test_client" / "localhost" / "client.crt";
+    client_self_cert = repo / "test_client" / "localhost" / "client.pem";
+    client_key = repo / "test_client" / "localhost" / "client.key";
 
-    fs::create_directories(repo);
-    fs::create_directories(repo / "test_client" / "localhost");
+    std::filesystem::create_directories(repo);
+    std::filesystem::create_directories(repo / "test_client" / "localhost");
 
-    // Generate CA certificate
-    std::string ca_key_cmd = "openssl genrsa -out " + ca_key.string() + " 2048";
-    std::string ca_cert_cmd = "openssl req -new -x509 -days 365 -key " + ca_key.string() + 
-                           " -out " + ca_cert.string() + 
-                           " -subj \"/C=US/ST=CA/L=Test/O=Ricochet/OU=Test/CN=Ricochet Test CA\"";
-
-    // Generate server certificate
-    std::string server_key_cmd = "openssl genrsa -out " + server_key.string() + " 2048";
-    std::string server_csr_cmd = "openssl req -new -key " + server_key.string() + 
-                               " -out " + server_csr.string() + 
-                               " -subj \"/C=US/ST=CA/L=Test/O=Ricochet/OU=Test/CN=localhost\"";
-    std::string server_cert_cmd = "openssl x509 -req -days 365 -in " + server_csr.string() + 
-                                " -CA " + ca_cert.string() + 
-                                " -CAkey " + ca_key.string() + 
-                                " -CAcreateserial -out " + server_cert.string();
-    std::string self_server_cert_cmd = "openssl x509 -req -days 365 -in " + server_csr.string() + 
-                                " -signkey " + server_key.string() + 
-                                " -out " + server_self_cert.string();
-
-    // Generate client certificate
-    std::string client_key_cmd = "openssl genrsa -out " + client_key.string() + " 2048";
-    std::string client_csr_cmd = "openssl req -new -key " + client_key.string() + 
-                               " -out " + client_csr.string() + 
-                               " -subj \"/C=US/ST=CA/L=Test/O=Ricochet/OU=Test/CN=test.client\"";
-    std::string client_cert_cmd = "openssl x509 -req -days 365 -in " + client_csr.string() + 
-                                " -CA " + ca_cert.string() + 
-                                " -CAkey " + ca_key.string() + 
-                                " -CAcreateserial -out " + client_cert.string();
-    std::string self_client_cert_cmd = "openssl x509 -req -days 365 -in " + client_csr.string() + 
-                                " -signkey " + client_key.string() + 
-                                " -out " + client_self_cert.string();
-
-    // Execute commands and check return codes
-    int result = 0;
-    result |= bp::system(ca_key_cmd);
-    result |= bp::system(ca_cert_cmd);
-    result |= bp::system(server_key_cmd);
-    result |= bp::system(server_csr_cmd);
-    result |= bp::system(server_cert_cmd);
-    result |= bp::system(self_server_cert_cmd);
-    result |= bp::system(client_key_cmd);
-    result |= bp::system(client_csr_cmd);
-    result |= bp::system(client_cert_cmd);
-    result |= bp::system(self_client_cert_cmd);
-
-    if (result != 0)
-        throw std::runtime_error("Failed to generate test certificates");
+    std::filesystem::create_symlink(std::filesystem::canonical(std::filesystem::path(__FILE__).parent_path() / "../certs/ca.crt"), ca_cert);
+    std::filesystem::create_symlink(std::filesystem::canonical(std::filesystem::path(__FILE__).parent_path() / "../certs/server.crt"), server_cert);
+    std::filesystem::create_symlink(std::filesystem::canonical(std::filesystem::path(__FILE__).parent_path() / "../certs/server.pem"), server_self_cert);
+    std::filesystem::create_symlink(std::filesystem::canonical(std::filesystem::path(__FILE__).parent_path() / "../certs/server.key"), server_key);
+    std::filesystem::create_symlink(std::filesystem::canonical(std::filesystem::path(__FILE__).parent_path() / "../certs/client.crt"), client_cert);
+    std::filesystem::create_symlink(std::filesystem::canonical(std::filesystem::path(__FILE__).parent_path() / "../certs/client.pem"), client_self_cert);
+    std::filesystem::create_symlink(std::filesystem::canonical(std::filesystem::path(__FILE__).parent_path() / "../certs/client.key"), client_key);
 }
 
 integration_test_fixture::context::~context()
 {
-    if (fs::exists(repo.parent_path()))
-        fs::remove_all(repo.parent_path());
+    if (std::filesystem::exists(repo.parent_path()))
+        std::filesystem::remove_all(repo.parent_path());
 }
 
 integration_test_fixture::integration_test_fixture()
