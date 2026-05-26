@@ -300,6 +300,7 @@
                 "CPACK_COMPONENTS_ALL": "server_files"
             },
             "packageName": "ricochet",
+            "configFile": "CPackServerConfig.cmake",
             "packageDirectory": ".."
         },
         {
@@ -318,6 +319,7 @@
                 "CPACK_INSTALL_CMAKE_PROJECTS": "../static-relwithdebinfo;tubus;ALL;/;../shared-relwithdebinfo;tubus;ALL;/"
             },
             "packageName": "libricochet",
+            "configFile": "CPackClientConfig.cmake",
             "packageDirectory": ".."
         }
     ],

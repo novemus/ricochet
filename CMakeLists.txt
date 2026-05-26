@@ -45,7 +45,7 @@ add_library(ricochet::libricochet ALIAS libricochet)
 generate_export_header(libricochet EXPORT_FILE_NAME "export.h")
 
 target_link_libraries(libricochet Boost::coroutine OpenSSL::Crypto OpenSSL::SSL)
-target_include_directories(libricochet PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(libricochet PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR})
 
 set_target_properties(libricochet PROPERTIES DEBUG_POSTFIX "d" OUTPUT_NAME ricochet IMPORT_PREFIX "lib")
 set_target_properties(libricochet PROPERTIES SOVERSION ${PROJECT_VERSION_MAJOR} VERSION ${PROJECT_VERSION})
@@ -88,7 +88,7 @@ if (NOT CMAKE_SKIP_INSTALL_RULES)
         set(TARGET_FILE ricochet-static-targets.cmake)
     endif()
 
-    install(EXPORT ricochet_export COMPONENT cmake_files
+    install(EXPORT ricochet_export COMPONENT client_files
         FILE ${TARGET_FILE}
         DESTINATION "${RICICHET_INSTALL_CMAKEDIR}"
         NAMESPACE ricochet::)
@@ -96,7 +96,7 @@ if (NOT CMAKE_SKIP_INSTALL_RULES)
     install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/ricochet-config.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/ricochet-config-version.cmake"
-        COMPONENT cmake_files
+        COMPONENT client_files
         DESTINATION "${RICICHET_INSTALL_CMAKEDIR}")
 
     install(FILES "${CMAKE_CURRENT_BINARY_DIR}/export.h" "src/proto.h" "src/agent.h" DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ricochet" COMPONENT client_files)
@@ -150,8 +150,10 @@ add_executable(ricochet_tests
 
 target_link_libraries(ricochet_tests Boost::coroutine Boost::log Boost::unit_test_framework OpenSSL::Crypto OpenSSL::SSL)
 
-target_include_directories(ricochet_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(ricochet_tests PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR})
 set_target_properties(ricochet_tests PROPERTIES DEBUG_POSTFIX "d")
+
+target_compile_definitions(ricochet_tests PRIVATE LIBRICOCHET_STATIC_DEFINE)
 
 add_test(NAME ricochet_tests COMMAND ricochet_tests)
 
@@ -168,13 +170,14 @@ if(NOT CMAKE_SKIP_INSTALL_RULES)
     set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
     set(CPACK_COMPONENTS_ALL_IN_ONE_PACKAGE ON)
 
-    set(DEVEL_DOC_FILES
+    set(DOC_FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.txt"
         "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
         "${CMAKE_CURRENT_SOURCE_DIR}/CHANGELOG.md"
         )
 
-    install(FILES ${DEVEL_DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/libricochet" COMPONENT client_files)
+    install(FILES ${DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/ricochet" COMPONENT server_files)
+    install(FILES ${DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/libricochet" COMPONENT client_files)
 
     if (CMAKE_HOST_SYSTEM_NAME MATCHES "Linux")
         cmake_host_system_information(RESULT DISTR QUERY DISTRIB_ID)
@@ -223,21 +226,34 @@ if(NOT CMAKE_SKIP_INSTALL_RULES)
                 COMMAND ${DSYMUTIL_EXE} $<TARGET_FILE:ricochet>
                 COMMAND ${STRIP_EXE} -S $<TARGET_FILE:ricochet>
                 )
+            install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/$<TARGET_FILE_NAME:ricochet>.dSYM" DESTINATION "dSYMs" COMPONENT server_files)
 
-            add_custom_command(
-                TARGET libricochet
-                POST_BUILD
-                COMMAND ${DSYMUTIL_EXE} $<TARGET_FILE:libricochet>
-                COMMAND ${STRIP_EXE} -S $<TARGET_FILE:libricochet>
-                )
-
-            install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/ricochet.dSYM" DESTINATION "dSYMs" COMPONENT server_files)
-            install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/libricochet.dSYM" DESTINATION "dSYMs" COMPONENT client_files)
-
-            set(CPACK_ARCHIVE_COMPONENT_INSTALL ON)
+            if(BUILD_SHARED_LIBS)
+                add_custom_command(
+                    TARGET libricochet
+                    POST_BUILD
+                    COMMAND ${DSYMUTIL_EXE} $<TARGET_FILE:libricochet>
+                    COMMAND ${STRIP_EXE} -S $<TARGET_FILE:libricochet>
+                    )
+                install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/$<TARGET_FILE_NAME:libricochet>.dSYM" DESTINATION "dSYMs" COMPONENT client_files)
+            endif()
         endif()
     endif()
 
-    string(TOLOWER "${PROJECT_NAME}-${PROJECT_VERSION}-${CPACK_PACKAGE_RELEASE}-${CMAKE_HOST_SYSTEM_NAME}-${CMAKE_HOST_SYSTEM_PROCESSOR}" CPACK_ARCHIVE_FILE_NAME)
+    set(CPACK_ARCHIVE_COMPONENT_INSTALL ON)
+
+    string(TOLOWER "ricochet-${PROJECT_VERSION}-${CPACK_PACKAGE_RELEASE}-${CMAKE_HOST_SYSTEM_NAME}-${CMAKE_HOST_SYSTEM_PROCESSOR}" SERVER_ARCHIVE_FILE_NAME)
+    string(TOLOWER "libricochet-${PROJECT_VERSION}-${CPACK_PACKAGE_RELEASE}-${CMAKE_HOST_SYSTEM_NAME}-${CMAKE_HOST_SYSTEM_PROCESSOR}" CLIENT_ARCHIVE_FILE_NAME)
+
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/CPackServerConfig.cmake"
+        "include(${CMAKE_CURRENT_BINARY_DIR}/CPackConfig.cmake)\n"
+        "set(CPACK_ARCHIVE_FILE_NAME ${SERVER_ARCHIVE_FILE_NAME})\n"
+        )
+
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/CPackClientConfig.cmake"
+        "include(${CMAKE_CURRENT_BINARY_DIR}/CPackConfig.cmake)\n"
+        "set(CPACK_ARCHIVE_FILE_NAME ${CLIENT_ARCHIVE_FILE_NAME})\n"
+        )
+
     include(CPack)
 endif()
