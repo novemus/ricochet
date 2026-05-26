@@ -1,12 +1,11 @@
-#include <boost/asio.hpp>
-#include <boost/asio/ssl.hpp>
 #include <filesystem>
 #include <random>
 #include <string>
 #include "fixture.h"
 
-integration_test_fixture::context::context() 
-    : repo(std::filesystem::temp_directory_path() / ("ricochet_server_test_"  + std::to_string(std::random_device{}())) / "repo")
+namespace fs = std::filesystem;
+
+integration_test_fixture::context::context() : repo(fs::temp_directory_path() / ("ricochet_server_test_"  + std::to_string(std::random_device{}())) / "repo")
 {
     ca_cert = repo.parent_path() / "ca.crt";
     server_cert = repo.parent_path() / "server.crt";

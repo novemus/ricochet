@@ -29,7 +29,7 @@ void session::start(bool reject, cleanup_function clean)
 {
     _inf_ << "Session " << this << (reject ? " reject..." : " start...");
 
-    m_io.post([this, weak = weak_from_this(), reject, clean]()
+    boost::asio::post(m_io, [this, weak = weak_from_this(), reject, clean]()
     {
         auto self = weak.lock();
         if (!self)
@@ -50,7 +50,7 @@ void session::close()
 {
     _inf_ << "Session " << this << " close...";
 
-    m_io.post([this, weak = weak_from_this()]()
+    boost::asio::post(m_io, [this, weak = weak_from_this()]()
     {
         auto self = weak.lock();
         if (!self)

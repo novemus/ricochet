@@ -58,7 +58,8 @@ if(MSVC)
     set(CMAKE_STATIC_LIBRARY_PREFIX "lib")
     set(CMAKE_SHARED_LIBRARY_PREFIX "lib")
     set(CMAKE_STATIC_LIBRARY_SUFFIX "-static.lib")
-    add_definitions(-D_WIN32_WINNT=0x0601)
+    add_compile_definitions(_WIN32_WINNT=0x0A00)
+    add_compile_definitions(WINVER=0x0A00)
 endif()
 
 ########## install ##########

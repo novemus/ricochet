@@ -20,12 +20,12 @@ server::server(boost::asio::io_context& io, const config& conf)
 {
     m_ssl->set_options(boost::asio::ssl::context::default_workarounds | boost::asio::ssl::context::single_dh_use);
 
-    m_ssl->use_certificate_chain_file(m_config.server_cert);
-    m_ssl->use_private_key_file(m_config.server_key, boost::asio::ssl::context::pem);
+    m_ssl->use_certificate_chain_file(m_config.server_cert.u8string());
+    m_ssl->use_private_key_file(m_config.server_key.u8string(), boost::asio::ssl::context::pem);
     m_ssl->set_verify_mode(boost::asio::ssl::verify_peer | boost::asio::ssl::verify_fail_if_no_peer_cert | boost::asio::ssl::verify_client_once);
 
     if (!m_config.ca_cert.empty())
-        m_ssl->load_verify_file(m_config.ca_cert);
+        m_ssl->load_verify_file(m_config.ca_cert.u8string());
 
     m_ssl->set_verify_callback([this](bool preverified, boost::asio::ssl::verify_context& ctx)
     {

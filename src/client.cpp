@@ -17,13 +17,13 @@ client::client(const boost::asio::ip::tcp::endpoint& server,
 
     if (!cert.empty() && !key.empty())
     {
-        m_ssl.use_certificate_file(cert, boost::asio::ssl::context::pem);
-        m_ssl.use_private_key_file(key, boost::asio::ssl::context::pem);
+        m_ssl.use_certificate_file(cert.u8string(), boost::asio::ssl::context::pem);
+        m_ssl.use_private_key_file(key.u8string(), boost::asio::ssl::context::pem);
     }
 
     if (!ca.empty())
     {
-        m_ssl.load_verify_file(ca);
+        m_ssl.load_verify_file(ca.u8string());
         m_ssl.set_verify_mode(boost::asio::ssl::verify_peer | boost::asio::ssl::verify_fail_if_no_peer_cert);
     }
 }

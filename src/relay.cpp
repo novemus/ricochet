@@ -146,7 +146,7 @@ void tcp_relay::close()
 {
     _inf_ << "TCP relay " << this << " closing...";
     
-    m_strand.post([weak = weak_from_this()]()
+    boost::asio::post(m_strand, [weak = weak_from_this()]()
     {
         if (auto self = weak.lock())
         {
@@ -427,7 +427,7 @@ void udp_relay::close()
 {
     _inf_ << "UDP relay " << this << " closing...";
     
-    m_strand.post([weak = weak_from_this()]()
+    boost::asio::post(m_strand, [weak = weak_from_this()]()
     {
         if (auto self = weak.lock())
         {
