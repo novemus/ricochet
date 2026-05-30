@@ -100,8 +100,8 @@ void server::accept()
                         if (!cert)
                             throw std::runtime_error("No peer certificate");
 
-                        std::string hash = m_repo.get_certificate_hash(cert.get());
-                        
+                        std::string hash = ricochet::repository::get_certificate_hash(cert.get());
+
                         std::lock_guard<std::mutex> lock(m_mutex);
 
                         auto relay = std::make_shared<session>(m_io, m_ssl, std::move(*socket), m_config.idle_timeout);

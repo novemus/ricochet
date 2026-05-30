@@ -20,14 +20,13 @@ bool repository::is_certificate_allowed(X509* cert) const
 
     update_cache_incremental();
 
-    std::string hash = get_certificate_hash_from_x509(cert);
+    std::string hash = get_certificate_hash(cert);
 
     std::lock_guard<std::mutex> lock(m_mutex);
     const auto& hashs = m_cache.get<by_hash>();
     auto it = hashs.find(hash);
     return it != hashs.end() && X509_cmp(cert, it->cert.get()) == 0;
 }
-
 
 std::string repository::get_certificate_hash(X509* cert)
 {
@@ -45,10 +44,10 @@ std::string repository::get_certificate_hash(X509* cert)
     }
 
     std::unique_ptr<unsigned char, decltype(&::free)> data(raw, &::free);
-    
+
     unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256(data.get(), length, hash);
-    
+
     std::stringstream ss;
     for (int i = 0; i < SHA256_DIGEST_LENGTH; ++i)
     {
@@ -56,6 +55,27 @@ std::string repository::get_certificate_hash(X509* cert)
     }
 
     return ss.str();
+}
+
+std::string repository::get_certificate_cn(X509* cert)
+{
+    if (!cert)
+        return "";
+
+    X509_NAME* subject = X509_get_subject_name(cert);
+    if (!subject)
+        return "";
+
+    int len = X509_NAME_get_text_by_NID(subject, NID_commonName, nullptr, 0);
+    if (len <= 0)
+        return "";
+
+    std::string cn(len + 1, '\0');
+    if (X509_NAME_get_text_by_NID(subject, NID_commonName, cn.data(), len + 1) <= 0)
+        return "";
+
+    cn.resize(len);
+    return cn;
 }
 
 std::pair<std::string, X509Ptr> repository::load_certificate_file(const std::filesystem::path& path) const
@@ -73,7 +93,7 @@ std::pair<std::string, X509Ptr> repository::load_certificate_file(const std::fil
     if (!cert)
         throw std::runtime_error("Failed to parse certificate: " + path.string());
 
-    std::string hash = get_certificate_hash_from_x509(cert.get());
+    std::string hash = get_certificate_hash(cert.get());
     return std::make_pair(hash, std::move(cert));
 }
 
@@ -111,6 +131,10 @@ void repository::update_cache_incremental() const
                     paths.erase(pi);
 
                 auto [hash, cert] = load_certificate_file(file);
+
+                _inf_ << "Loaded certificate for " << file.parent_path().parent_path().filename().string() << "/" << file.parent_path().filename().string() 
+                      << ", CN=" << get_certificate_cn(cert.get()) << ", SHA256=" << hash;
+
                 m_cache.emplace(certificate { hash, file, std::move(cert), time });
             }
             catch (const std::exception& e)
@@ -120,32 +144,6 @@ void repository::update_cache_incremental() const
             }
         }
     }
-}
-
-std::string repository::get_certificate_hash_from_x509(X509* cert) const
-{
-    unsigned char* data = nullptr;
-    int length = i2d_X509(cert, &data);
-
-    if (length < 0)
-    {
-        if (data)
-            ::free(data);
-        return "";
-    }
-
-    std::unique_ptr<unsigned char, decltype(&::free)> ptr(data, &::free);
-
-    unsigned char hash[SHA256_DIGEST_LENGTH];
-    SHA256(ptr.get(), length, hash);
-
-    std::stringstream ss;
-    for (int i = 0; i < SHA256_DIGEST_LENGTH; ++i)
-    {
-        ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]);
-    }
-
-    return ss.str();
 }
 
 std::set<std::filesystem::path> repository::collect_current_certificate_files() const

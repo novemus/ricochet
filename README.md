@@ -69,17 +69,17 @@ Server options:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--bind-addr` | `0.0.0.0` | Listen address |
-| `--bind-port` | `4433` | Listen port |
-| `--cert-file` | `server.pem` | Server certificate |
-| `--key-file` | `server.key` | Server private key |
-| `--ca-file` | `ca.pem` | CA for client verification |
-| `--repo-path` | `.` | Client certificate repository |
-| `--idle-time` | `300` | Idle session timeout in seconds |
-| `--client-limit` | `10` | Maximum sessions per client |
-| `--total-limit` | `100` | Maximum concurrent sessions |
-| `--log-level` | `info` | Logging level (trace, debug, info, warning, error, fatal) |
-| `--log-file` | — | Path to log file (optional) |
+| `--address` | `0.0.0.0` | Listen address |
+| `--port` | `4433` | Listen port |
+| `--cert` | `server.pem` | Server certificate |
+| `--key` | `server.key` | Server private key |
+| `--ca` | — | CA for client verification (optional) |
+| `--repo` | `.` | Client certificate repository |
+| `--idle` | `300` | Idle session timeout in seconds |
+| `--quota` | `10` | Maximum sessions per client |
+| `--limit` | `100` | Maximum concurrent sessions |
+| `--report` | `info` | Logging level (trace, debug, info, warning, error, fatal) |
+| `--journal` | — | Path to log file (optional) |
 
 ### Client API
 

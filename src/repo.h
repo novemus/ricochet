@@ -78,7 +78,6 @@ class repository
     mutable std::mutex m_mutex;
 
     void update_cache_incremental() const;
-    std::string get_certificate_hash_from_x509(X509* cert) const;
     std::set<std::filesystem::path> collect_current_certificate_files() const;
     std::pair<std::string, X509Ptr> load_certificate_file(const std::filesystem::path& file_path) const;
 
@@ -89,6 +88,7 @@ public:
 
     bool is_certificate_allowed(X509* cert) const;
     static std::string get_certificate_hash(X509* cert);
+    static std::string get_certificate_cn(X509* cert);
 };
 
 } // namespace ricochet
