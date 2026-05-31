@@ -927,8 +927,6 @@ BOOST_AUTO_TEST_CASE(tcp4_client_server_relay)
         boost::asio::ip::tcp::endpoint mirror(ep.address(), ep.port());
         boost::asio::ip::tcp::endpoint local(ricochet::get_outgoing_address(io, true), 3000);
 
-        mock_tcp_server_peer server(io, local, mirror);
- 
         BOOST_REQUIRE_NO_THROW(
             relay->start(
                 ricochet::peer(boost::asio::ip::make_address("0.0.0.0"), 0, ricochet::schema::client),
@@ -936,10 +934,11 @@ BOOST_AUTO_TEST_CASE(tcp4_client_server_relay)
             )
         );
 
-        BOOST_REQUIRE_NO_THROW(server.connect());
-
         mock_tcp_client_peer client(io, mirror);
         BOOST_REQUIRE_NO_THROW(client.connect());
+
+        mock_tcp_server_peer server(io, local, mirror);
+        BOOST_REQUIRE_NO_THROW(server.connect());
 
         std::vector<uint8_t> data = { 1, 2, 3, 4, 5 };
 
@@ -983,8 +982,6 @@ BOOST_AUTO_TEST_CASE(tcp6_client_server_relay)
         boost::asio::ip::tcp::endpoint mirror(ep.address(), ep.port());
         boost::asio::ip::tcp::endpoint local(ricochet::get_outgoing_address(io, false), 4000);
 
-        mock_tcp_server_peer server(io, local, mirror);
-
         BOOST_REQUIRE_NO_THROW(
             relay->start(
                 ricochet::peer(boost::asio::ip::make_address("::"), 0, ricochet::schema::client),
@@ -992,10 +989,11 @@ BOOST_AUTO_TEST_CASE(tcp6_client_server_relay)
             )
         );
 
-        BOOST_REQUIRE_NO_THROW(server.connect());
-
         mock_tcp_client_peer client(io, mirror);
         BOOST_REQUIRE_NO_THROW(client.connect());
+
+        mock_tcp_server_peer server(io, local, mirror);
+        BOOST_REQUIRE_NO_THROW(server.connect());
 
         std::vector<uint8_t> data = { 1, 2, 3, 4, 5 };
 
@@ -1129,6 +1127,242 @@ BOOST_AUTO_TEST_CASE(udp6_client_server_relay)
 
         BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
         BOOST_TEST_MESSAGE("UDP6 client-server relay test passed");
+    }
+    catch (const ricochet::unavailable_proto& e)
+    {
+        BOOST_TEST_MESSAGE("UDP6 unavailable: " + std::string(e.what()));
+        BOOST_TEST(true);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(tcp4_server_server_relay)
+{
+    auto cp = std::make_shared<std::promise<void>>();
+    ricochet::cleanup_function cleanup = [cp]() mutable { cp->set_value(); };
+
+    try
+    {
+        auto relay = std::make_shared<ricochet::tcp_relay>(
+            io,
+            ricochet::protocol::tcp4,
+            boost::posix_time::seconds(10),
+            cleanup
+        );
+
+        ricochet::endpoint ep = relay->get_endpoint();
+        boost::asio::ip::tcp::endpoint mirror(ep.address(), ep.port());
+        boost::asio::ip::tcp::endpoint one(ricochet::get_outgoing_address(io, true), 3001);
+        boost::asio::ip::tcp::endpoint two(ricochet::get_outgoing_address(io, true), 3002);
+
+        BOOST_REQUIRE_NO_THROW(
+            relay->start(
+                ricochet::peer(one.address(), one.port(), ricochet::schema::server),
+                ricochet::peer(two.address(), two.port(), ricochet::schema::server)
+            )
+        );
+
+        mock_tcp_server_peer red(io, one, mirror);
+        BOOST_REQUIRE_NO_THROW(red.connect());
+
+        mock_tcp_server_peer blue(io, two, mirror);
+        BOOST_REQUIRE_NO_THROW(blue.connect());
+
+        std::vector<uint8_t> data = { 1, 2, 3, 4, 5 };
+
+        BOOST_REQUIRE_NO_THROW(red.send(data));
+        BOOST_REQUIRE_NO_THROW(blue.send(data));
+        BOOST_REQUIRE_NO_THROW(BOOST_CHECK(red.receive(data.size()) == data));
+        BOOST_REQUIRE_NO_THROW(BOOST_CHECK(blue.receive(data.size()) == data));
+
+        mock_tcp_client_peer extra(io, mirror);
+        BOOST_REQUIRE_THROW(extra.connect(), boost::system::system_error);
+
+        BOOST_REQUIRE_NO_THROW(red.close());
+        BOOST_REQUIRE_NO_THROW(blue.close());
+        BOOST_REQUIRE_NO_THROW(relay->close());
+
+        BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
+        BOOST_TEST_MESSAGE("TCP4 server-server relay test passed");
+    }
+    catch (const ricochet::unavailable_proto& e)
+    {
+        BOOST_TEST_MESSAGE("TCP4 unavailable: " + std::string(e.what()));
+        BOOST_TEST(true);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(tcp6_server_server_relay)
+{
+    auto cp = std::make_shared<std::promise<void>>();
+    ricochet::cleanup_function cleanup = [cp]() mutable { cp->set_value(); };
+
+    try
+    {
+        auto relay = std::make_shared<ricochet::tcp_relay>(
+            io,
+            ricochet::protocol::tcp6,
+            boost::posix_time::seconds(10),
+            cleanup
+        );
+
+        ricochet::endpoint ep = relay->get_endpoint();
+        boost::asio::ip::tcp::endpoint mirror(ep.address(), ep.port());
+        boost::asio::ip::tcp::endpoint one(ricochet::get_outgoing_address(io, false), 4001);
+        boost::asio::ip::tcp::endpoint two(ricochet::get_outgoing_address(io, false), 4002);
+
+        BOOST_REQUIRE_NO_THROW(
+            relay->start(
+                ricochet::peer(one.address(), one.port(), ricochet::schema::server),
+                ricochet::peer(two.address(), two.port(), ricochet::schema::server)
+            )
+        );
+
+        mock_tcp_server_peer red(io, one, mirror);
+        BOOST_REQUIRE_NO_THROW(red.connect());
+
+        mock_tcp_server_peer blue(io, two, mirror);
+        BOOST_REQUIRE_NO_THROW(blue.connect());
+
+        std::vector<uint8_t> data = { 1, 2, 3, 4, 5 };
+
+        BOOST_REQUIRE_NO_THROW(red.send(data));
+        BOOST_REQUIRE_NO_THROW(blue.send(data));
+        BOOST_REQUIRE_NO_THROW(BOOST_CHECK(red.receive(data.size()) == data));
+        BOOST_REQUIRE_NO_THROW(BOOST_CHECK(blue.receive(data.size()) == data));
+
+        mock_tcp_client_peer extra(io, mirror);
+        BOOST_REQUIRE_THROW(extra.connect(), boost::system::system_error);
+
+        BOOST_REQUIRE_NO_THROW(red.close());
+        BOOST_REQUIRE_NO_THROW(blue.close());
+        BOOST_REQUIRE_NO_THROW(relay->close());
+
+        BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
+        BOOST_TEST_MESSAGE("TCP6 server-server relay test passed");
+    }
+    catch (const ricochet::unavailable_proto& e)
+    {
+        BOOST_TEST_MESSAGE("TCP6 unavailable: " + std::string(e.what()));
+        BOOST_TEST(true);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(udp4_server_server_relay)
+{
+    auto cp = std::make_shared<std::promise<void>>();
+    ricochet::cleanup_function cleanup = [cp]() mutable { cp->set_value(); };
+
+    try
+    {
+        auto relay = std::make_shared<ricochet::udp_relay>(
+            io,
+            ricochet::protocol::udp4,
+            boost::posix_time::seconds(10),
+            cleanup
+        );
+
+        ricochet::endpoint ep = relay->get_endpoint();
+        boost::asio::ip::udp::endpoint mirror(ep.address(), ep.port());
+        boost::asio::ip::udp::endpoint one(ricochet::get_outgoing_address(io, true), 5001);
+        boost::asio::ip::udp::endpoint two(ricochet::get_outgoing_address(io, true), 5002);
+
+        BOOST_REQUIRE_NO_THROW(
+            relay->start(
+                ricochet::peer(one.address(), one.port(), ricochet::schema::server),
+                ricochet::peer(two.address(), two.port(), ricochet::schema::server)
+            )
+        );
+
+        boost::asio::ip::udp::socket red(io);
+        red.open(one.protocol());
+        red.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
+        red.bind(one);
+        red.connect(mirror);
+
+        boost::asio::ip::udp::socket blue(io);
+        blue.open(two.protocol());
+        blue.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
+        blue.bind(two);
+        blue.connect(mirror);
+
+        boost::asio::ip::udp::socket extra(io);
+        extra.connect(mirror);
+
+        std::vector<uint8_t> data = { 1, 2, 3, 4, 5 };
+        std::vector<uint8_t> more = { 5, 4, 3, 2, 1 };
+
+        BOOST_REQUIRE_NO_THROW(udp_helper::push(red, blue, data));
+        BOOST_REQUIRE_NO_THROW(udp_helper::push(blue, red, data));
+
+        BOOST_REQUIRE_THROW(udp_helper::push(extra, red, more), boost::system::system_error);
+        BOOST_REQUIRE_THROW(udp_helper::push(blue, extra, more), boost::system::system_error);
+
+        BOOST_REQUIRE_NO_THROW(relay->close());
+
+        BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
+        BOOST_TEST_MESSAGE("UDP4 server-server relay test passed");
+    }
+    catch (const ricochet::unavailable_proto& e)
+    {
+        BOOST_TEST_MESSAGE("UDP4 unavailable: " + std::string(e.what()));
+        BOOST_TEST(true);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(udp6_server_server_relay)
+{
+    auto cp = std::make_shared<std::promise<void>>();
+    ricochet::cleanup_function cleanup = [cp]() mutable { cp->set_value(); };
+
+    try
+    {
+        auto relay = std::make_shared<ricochet::udp_relay>(
+            io,
+            ricochet::protocol::udp6,
+            boost::posix_time::seconds(10),
+            cleanup
+        );
+
+        ricochet::endpoint ep = relay->get_endpoint();
+        boost::asio::ip::udp::endpoint mirror(ep.address(), ep.port());
+        boost::asio::ip::udp::endpoint one(ricochet::get_outgoing_address(io, false), 6001);
+        boost::asio::ip::udp::endpoint two(ricochet::get_outgoing_address(io, false), 6002);
+
+        BOOST_REQUIRE_NO_THROW(
+            relay->start(
+                ricochet::peer(one.address(), one.port(), ricochet::schema::server),
+                ricochet::peer(two.address(), two.port(), ricochet::schema::server)
+            )
+        );
+
+        boost::asio::ip::udp::socket red(io);
+        red.open(one.protocol());
+        red.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
+        red.bind(one);
+        red.connect(mirror);
+
+        boost::asio::ip::udp::socket blue(io);
+        blue.open(two.protocol());
+        blue.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
+        blue.bind(two);
+        blue.connect(mirror);
+
+        boost::asio::ip::udp::socket extra(io);
+        extra.connect(mirror);
+
+        std::vector<uint8_t> data = { 1, 2, 3, 4, 5 };
+        std::vector<uint8_t> more = { 5, 4, 3, 2, 1 };
+
+        BOOST_REQUIRE_NO_THROW(udp_helper::push(red, blue, data));
+        BOOST_REQUIRE_NO_THROW(udp_helper::push(blue, red, data));
+
+        BOOST_REQUIRE_THROW(udp_helper::push(extra, red, more), boost::system::system_error);
+        BOOST_REQUIRE_THROW(udp_helper::push(blue, extra, more), boost::system::system_error);
+
+        BOOST_REQUIRE_NO_THROW(relay->close());
+
+        BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
+        BOOST_TEST_MESSAGE("UDP6 server-server relay test passed");
     }
     catch (const ricochet::unavailable_proto& e)
     {

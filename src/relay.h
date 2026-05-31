@@ -28,8 +28,8 @@ class tcp_relay : public relay, public std::enable_shared_from_this<tcp_relay>
     boost::asio::io_context& m_io;
     boost::asio::io_context::strand m_strand;
     boost::asio::ip::tcp::acceptor m_server;
-    boost::asio::ip::tcp::socket m_near;
-    boost::asio::ip::tcp::socket m_away;
+    boost::asio::ip::tcp::socket m_one;
+    boost::asio::ip::tcp::socket m_two;
     boost::asio::deadline_timer m_idle_timer;
     boost::asio::deadline_timer m_retry_timer;
     boost::posix_time::seconds m_idle;
@@ -48,10 +48,8 @@ public:
 
 private:
 
-    void connect_peer(const endpoint& which);
-    void accept_peer(const endpoint& which);
+    void start_relay(const peer& one, const peer& two);
     void transmit_data(boost::asio::ip::tcp::socket& from, boost::asio::ip::tcp::socket& to);
-    void start_relay();
     void break_relay();
     void watch_activity();
 };
@@ -63,8 +61,8 @@ class udp_relay : public relay, public std::enable_shared_from_this<udp_relay>
     boost::asio::io_context& m_io;
     boost::asio::io_context::strand m_strand;
     boost::asio::ip::udp::socket m_socket;
-    boost::asio::ip::udp::endpoint m_near;
-    boost::asio::ip::udp::endpoint m_away;
+    boost::asio::ip::udp::endpoint m_one;
+    boost::asio::ip::udp::endpoint m_two;
     boost::asio::deadline_timer m_timer;
     boost::posix_time::seconds m_idle;
     cleanup_function m_clean;

@@ -310,47 +310,40 @@ void session::handle_connect_query()
     {
         auto red = payload.red();
         auto blue = payload.blue();
-        
+
         if (red.role() == ricochet::schema::server && (red.location().address().is_unspecified() || red.location().port() == 0))
         {
             _wrn_ << "Session " << this << " invalid red server location";
             send_error_reply(ricochet::failure::malformed_message);
             return;
         }
-        
+
         if (blue.role() == ricochet::schema::server && (blue.location().address().is_unspecified() || blue.location().port() == 0))
         {
             _wrn_ << "Session " << this << " invalid blue server location";
             send_error_reply(ricochet::failure::malformed_message);
             return;
         }
-        
-        if (red.role() == ricochet::schema::server && blue.role() == ricochet::schema::server)
-        {
-            _wrn_ << "Session " << this << " both peers are servers";
-            send_error_reply(ricochet::failure::malformed_message);
-            return;
-        }
-        
+
         bool red_is_ipv6 = red.location().address().is_v6();
         bool blue_is_ipv6 = blue.location().address().is_v6();
-        
+
         bool protocol_matches = false;
         protocol relay_protocol = m_relay->get_protocol();
         if (relay_protocol == protocol::tcp4 || relay_protocol == protocol::udp4)
             protocol_matches = !red_is_ipv6 && !blue_is_ipv6;
         else if (relay_protocol == protocol::tcp6 || relay_protocol == protocol::udp6)
             protocol_matches = red_is_ipv6 && blue_is_ipv6;
-        
+
         if (!protocol_matches)
         {
             _wrn_ << "Session " << this << " endpoint protocol mismatch";
             send_error_reply(ricochet::failure::malformed_message);
             return;
         }
-        
+
         m_relay->start(red, blue);
-        
+
         do_write(ricochet::reply::make_confirm_reply());
     }
     else

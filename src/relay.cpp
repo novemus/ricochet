@@ -86,8 +86,8 @@ tcp_relay::tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_t
     : m_io(io)
     , m_strand(io)
     , m_server(io)
-    , m_near(io)
-    , m_away(io)
+    , m_one(io)
+    , m_two(io)
     , m_idle_timer(io)
     , m_retry_timer(io)
     , m_idle(idle)
@@ -129,16 +129,7 @@ void tcp_relay::start(const peer& red, const peer& blue)
 {
     _inf_ << "TCP relay " << this << " starting, red=" << red << ", blue=" << blue;
 
-    if (red.role() == schema::client)
-        accept_peer(red.location());
-    else
-        connect_peer(red.location());
-    
-    if (blue.role() == schema::client)
-        accept_peer(blue.location());
-    else
-        connect_peer(blue.location());
-
+    start_relay(red, blue);
     watch_activity();
 }
 
@@ -155,20 +146,6 @@ void tcp_relay::close()
     });
 }
 
-void tcp_relay::start_relay()
-{
-    if (m_near.is_open() && m_away.is_open())
-    {
-        _inf_ << "TCP relay " << this << " is active";
-
-        boost::system::error_code ec;
-        m_server.close(ec);
-
-        transmit_data(m_near, m_away);
-        transmit_data(m_away, m_near);
-    }
-}
-
 void tcp_relay::watch_activity()
 {
     m_idle_timer.expires_from_now(m_idle);
@@ -177,7 +154,7 @@ void tcp_relay::watch_activity()
         auto self = weak.lock();
         if (!self)
             return;
-        
+
         if (!ec)
         {
             auto expired = std::chrono::duration_cast<std::chrono::seconds>(
@@ -197,32 +174,22 @@ void tcp_relay::watch_activity()
     }));
 }
 
-void tcp_relay::connect_peer(const endpoint& which)
+void tcp_relay::start_relay(const peer& one, const peer& two)
 {
-    auto endpoint = m_server.local_endpoint();
-
-    auto peer = std::make_shared<boost::asio::ip::tcp::socket>(m_io);
-
-    try
+    if (m_one.is_open() && m_two.is_open())
     {
-        peer->open(endpoint.protocol());
-        peer->set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
-#if defined(__APPLE__) || defined(__linux__)
-        int optval = 1;
-        ::setsockopt(peer->native_handle(), SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
-#endif
-        peer->bind(endpoint);
+        _inf_ << "TCP relay " << this << " is active";
+
+        boost::system::error_code ec;
+        m_server.close(ec);
+
+        transmit_data(m_one, m_two);
+        transmit_data(m_two, m_one);
     }
-    catch (const std::exception& e)
+    else if ((!m_one.is_open() && one.role() == schema::client) || (!m_two.is_open() && two.role() == schema::client))
     {
-        _err_ << "TCP relay " << this << " failed to bind: " << e.what();
-
-        break_relay();
-        return;
-    }
-
-    peer->async_connect(boost::asio::ip::tcp::endpoint(which.address(), which.port()),
-        m_strand.wrap([this, weak = weak_from_this(), peer, which](const boost::system::error_code& ec)
+        auto peer = std::make_shared<boost::asio::ip::tcp::socket>(m_io); 
+        m_server.async_accept(*peer, m_strand.wrap([this, weak = weak_from_this(), peer, one, two](const boost::system::error_code& ec)
         {
             auto self = weak.lock();
             if (!self)
@@ -230,81 +197,112 @@ void tcp_relay::connect_peer(const endpoint& which)
 
             if (!ec)
             {
-                _dbg_ << "TCP relay " << this << " connected to peer " << which;
-                
-                if (m_near.is_open())
-                    m_away = std::move(*peer);
-                else
-                    m_near = std::move(*peer);
+                auto ep = peer->remote_endpoint();
+                auto ep1 = one.location();
+                auto ep2 = two.location();
 
-                start_relay();
+                bool one_matches = !m_one.is_open() && one.role() == schema::client
+                                && (ep1.address().is_unspecified() || ep.address() == ep1.address())
+                                && (ep1.port() == 0 || ep.port() == ep1.port());
+                bool two_matches = !m_two.is_open() && two.role() == schema::client
+                                && (ep2.address().is_unspecified() || ep.address() == ep2.address())
+                                && (ep2.port() == 0 || ep.port() == ep2.port());
+
+                if (one_matches)
+                {
+                    _dbg_ << "TCP relay " << this << " accepted peer " << ep;
+                    m_one = std::move(*peer);
+                }
+                else if (two_matches)
+                {
+                    _dbg_ << "TCP relay " << this << " accepted peer " << ep;
+                    m_two = std::move(*peer);
+                }
+                else
+                {
+                    _wrn_ << "TCP relay " << this << " rejected wrong peer " << ep;
+
+                    boost::system::error_code ec;
+                    peer->shutdown(boost::asio::socket_base::shutdown_type::shutdown_both, ec);
+                }
+
+                start_relay(one, two);
             }
-            else if (ec == boost::asio::error::connection_refused && m_reconnects < 3)
+            else
+            {
+                _err_ << "TCP relay " << this << " failed to accept: " << ec.message();
+                break_relay();
+            }
+        }));
+    }
+    else if ((!m_one.is_open() && one.role() == schema::server) || (!m_two.is_open() && two.role() == schema::server))
+    {
+        auto local = m_server.local_endpoint();
+        auto peer = std::make_shared<boost::asio::ip::tcp::socket>(m_io);
+
+        try
+        {
+            peer->open(local.protocol());
+            peer->set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
+#if defined(__APPLE__) || defined(__linux__)
+            int optval = 1;
+            ::setsockopt(peer->native_handle(), SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+#endif
+            peer->bind(local);
+        }
+        catch (const std::exception& e)
+        {
+            _err_ << "TCP relay " << this << " failed to bind: " << e.what();
+
+            break_relay();
+            return;
+        }
+
+        boost::asio::ip::tcp::endpoint ep = m_one.is_open() 
+                                          ? boost::asio::ip::tcp::endpoint(two.location().address(), two.location().port())
+                                          : boost::asio::ip::tcp::endpoint(one.location().address(), one.location().port());
+
+        peer->async_connect(ep, m_strand.wrap([this, weak = weak_from_this(), peer, ep, one, two](const boost::system::error_code& ec)
+        {
+            auto self = weak.lock();
+            if (!self)
+                return;
+
+            if (!ec)
+            {
+                _dbg_ << "TCP relay " << this << " connected to peer " << ep;
+
+                if (ep.address() == one.location().address() && ep.port() == one.location().port())
+                    m_one = std::move(*peer);
+                else
+                    m_two = std::move(*peer);
+
+                m_reconnects = 0;
+                start_relay(one, two);
+            }
+            else if (ec == boost::asio::error::connection_refused && m_reconnects < 4)
             {
                 m_reconnects++;
-                _wrn_ << "TCP relay " << this << " connection refused to peer " << which << ", retrying in 2 seconds";
+                _wrn_ << "TCP relay " << this << " connection refused to peer " << ep << ", retrying in " << m_reconnects * 2 << " seconds";
 
-                m_retry_timer.expires_from_now(boost::posix_time::seconds(2));
-                m_retry_timer.async_wait(m_strand.wrap([this, weak = weak_from_this(), which](const boost::system::error_code& ec)
+                m_retry_timer.expires_from_now(boost::posix_time::seconds(m_reconnects * 2));
+                m_retry_timer.async_wait(m_strand.wrap([this, weak = weak_from_this(), one, two](const boost::system::error_code& ec)
                 {
                     auto self = weak.lock();
                     if (!self)
                         return;
 
                     if (!ec)
-                        connect_peer(which);
+                        start_relay(one, two);
                 }));
             }
             else
             {
-                _err_ << "TCP relay " << this << " failed to connect to peer " << which << ": " << ec.message();
+                _err_ << "TCP relay " << this << " failed to connect to peer " << ep << ": " << ec.message();
                 break_relay();
             }
         }));
-}
-
-void tcp_relay::accept_peer(const endpoint& which)
-{
-    auto peer = std::make_shared<boost::asio::ip::tcp::socket>(m_io); 
-    m_server.async_accept(*peer, m_strand.wrap([this, weak = weak_from_this(), peer, which](const boost::system::error_code& ec)
-    {
-        auto self = weak.lock();
-        if (!self)
-            return;
-
-        if (!ec)
-        {
-            auto endpoint = peer->remote_endpoint();
-
-            bool address_matches = which.address().is_unspecified() || endpoint.address() == which.address();
-            bool port_matches = which.port() == 0 || endpoint.port() == which.port();
-
-            if (address_matches && port_matches)
-            {
-                _dbg_ << "TCP relay " << this << " accepted peer " << endpoint;
-
-                if (m_near.is_open())
-                    m_away = std::move(*peer);
-                else
-                    m_near = std::move(*peer);
-
-                start_relay();
-            }
-            else
-            {
-                _wrn_ << "TCP relay " << this << " rejected wrong peer " << endpoint;
-
-                boost::system::error_code ec;
-                peer->shutdown(boost::asio::socket_base::shutdown_type::shutdown_both, ec);
-                accept_peer(which);
-            }
-        }
-        else
-        {
-            _err_ << "TCP relay " << this << " failed to accept: " << ec.message();
-            break_relay();
-        }
-    }));
+    }
 }
 
 void tcp_relay::transmit_data(boost::asio::ip::tcp::socket& from, boost::asio::ip::tcp::socket& to)
@@ -353,8 +351,8 @@ void tcp_relay::break_relay()
     boost::system::error_code ec;
     m_server.close(ec);
 
-    m_near.close(ec);
-    m_away.close(ec);
+    m_one.close(ec);
+    m_two.close(ec);
 
     m_idle_timer.cancel(ec);
     m_retry_timer.cancel(ec);
@@ -378,7 +376,7 @@ udp_relay::udp_relay(boost::asio::io_context& io, protocol proto, boost::posix_t
 {
     m_socket.set_option(boost::asio::socket_base::reuse_address(true));
     m_socket.bind(boost::asio::ip::udp::endpoint(proto == protocol::udp6 ? boost::asio::ip::udp::v6() : boost::asio::ip::udp::v4(), 0));
-    
+
     _trc_("UDP relay " << this << " created (" << proto << ")");
 }
 
@@ -403,21 +401,8 @@ void udp_relay::start(const peer& red, const peer& blue)
 {
     _inf_ << "UDP relay " << this << " starting, red=" << red << ", blue=" << blue;
 
-    if (red.role() == schema::server)
-    {
-        if (m_near.address().is_unspecified() || m_near.port() == 0)
-            m_near = boost::asio::ip::udp::endpoint(red.location().address(), red.location().port());
-        else
-            m_away = boost::asio::ip::udp::endpoint(red.location().address(), red.location().port());
-    }
-
-    if (blue.role() == schema::server)
-    {
-        if (m_near.address().is_unspecified() || m_near.port() == 0)
-            m_near = boost::asio::ip::udp::endpoint(blue.location().address(), blue.location().port());
-        else
-            m_away = boost::asio::ip::udp::endpoint(blue.location().address(), blue.location().port());
-    }
+    m_one = boost::asio::ip::udp::endpoint(red.location().address(), red.location().port());
+    m_two = boost::asio::ip::udp::endpoint(blue.location().address(), blue.location().port());
 
     read_socket();
     watch_activity();
@@ -466,7 +451,7 @@ void udp_relay::watch_activity()
 
 bool udp_relay::can_transmit() const
 {
-    return !m_near.address().is_unspecified() && m_near.port() != 0 && !m_away.address().is_unspecified() && m_away.port() != 0;
+    return !m_one.address().is_unspecified() && m_one.port() != 0 && !m_two.address().is_unspecified() && m_two.port() != 0;
 }
 
 void udp_relay::read_socket()
@@ -485,22 +470,22 @@ void udp_relay::read_socket()
             {
                 if (!can_transmit())
                 {
-                    bool near_address_matches = m_near.address().is_unspecified() || (m_near.port() == 0 && peer->address() == m_near.address());
-                    bool near_port_matches = m_near.port() == 0 || (m_near.address().is_unspecified() && peer->port() == m_near.port());
-                    bool away_address_matches = m_away.address().is_unspecified() || (m_away.port() == 0 && peer->address() == m_away.address());
-                    bool away_port_matches = m_away.port() == 0 || (m_away.address().is_unspecified() && peer->port() == m_away.port());
+                    bool one_address_matches = m_one.address().is_unspecified() || (m_one.port() == 0 && peer->address() == m_one.address());
+                    bool one_port_matches = m_one.port() == 0 || (m_one.address().is_unspecified() && peer->port() == m_one.port());
+                    bool two_address_matches = m_two.address().is_unspecified() || (m_two.port() == 0 && peer->address() == m_two.address());
+                    bool two_port_matches = m_two.port() == 0 || (m_two.address().is_unspecified() && peer->port() == m_two.port());
 
-                    if (near_address_matches && near_port_matches)
+                    if (one_address_matches && one_port_matches)
                     {
-                        _dbg_ << "UDP relay " << this << " connected near peer " << *peer;
+                        _dbg_ << "UDP relay " << this << " connected peer " << *peer;
                         m_timestamp = std::chrono::steady_clock::now();
-                        m_near = *peer;
+                        m_one = *peer;
                     }
-                    else if (away_address_matches && away_port_matches)
+                    else if (two_address_matches && two_port_matches)
                     {
-                        _dbg_ << "UDP relay " << this << " connected away peer " << *peer;
+                        _dbg_ << "UDP relay " << this << " connected peer " << *peer;
                         m_timestamp = std::chrono::steady_clock::now();
-                        m_away = *peer;
+                        m_two = *peer;
                     }
                     else
                     {
@@ -513,10 +498,10 @@ void udp_relay::read_socket()
                     }
                 }
 
-                if (can_transmit() && (*peer == m_near || *peer == m_away))
+                if (can_transmit() && (*peer == m_one || *peer == m_two))
                 {
                     m_timestamp = std::chrono::steady_clock::now();
-                    m_socket.async_send_to(boost::asio::buffer(buffer->data(), size), *peer == m_near ? m_away : m_near, 
+                    m_socket.async_send_to(boost::asio::buffer(buffer->data(), size), *peer == m_one ? m_two : m_one, 
                         m_strand.wrap([this, weak, peer](const boost::system::error_code& ec, std::size_t)
                     {
                         auto self = weak.lock();
