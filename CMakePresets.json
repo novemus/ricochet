@@ -221,7 +221,7 @@
                 "CPACK_DEBIAN_PACKAGE_DEPENDS": "libboost-dev (>= 1.81) | libboost1.81-dev",
                 "CPACK_PACKAGE_DESCRIPTION_SUMMARY": "Client for Ricochet relay server",
                 "CPACK_PACKAGE_DESCRIPTION": "C++ client library for Ricochet relay server.",
-                "CPACK_INSTALL_CMAKE_PROJECTS": "../static-relwithdebinfo;tubus;ALL;/;../shared-relwithdebinfo;tubus;ALL;/",
+                "CPACK_INSTALL_CMAKE_PROJECTS": "../static-relwithdebinfo;ricochet;ALL;/;../shared-relwithdebinfo;ricochet;ALL;/",
                 "CPACK_DEBIAN_PACKAGE_MAINTAINER": "Community"
             },
             "generators": [
@@ -273,7 +273,7 @@
                 "CPACK_RPM_PACKAGE_REQUIRES": "boost-devel, openssl-devel",
                 "CPACK_RPM_PACKAGE_SUMMARY": "Client for Ricochet relay server",
                 "CPACK_RPM_PACKAGE_DESCRIPTION": "C++ client library for Ricochet relay server.",
-                "CPACK_INSTALL_CMAKE_PROJECTS": "../static-relwithdebinfo;tubus;ALL;/;../shared-relwithdebinfo;tubus;ALL;/",
+                "CPACK_INSTALL_CMAKE_PROJECTS": "../static-relwithdebinfo;ricochet;ALL;/;../shared-relwithdebinfo;ricochet;ALL;/",
                 "CPACK_RPM_PACKAGE_VENDOR": "Community"
             },
             "generators": [
@@ -316,7 +316,7 @@
             ],
             "variables": {
                 "CPACK_COMPONENTS_ALL": "client_files",
-                "CPACK_INSTALL_CMAKE_PROJECTS": "../static-relwithdebinfo;tubus;ALL;/;../shared-relwithdebinfo;tubus;ALL;/"
+                "CPACK_INSTALL_CMAKE_PROJECTS": "../static-relwithdebinfo;ricochet;ALL;/;../shared-relwithdebinfo;ricochet;ALL;/"
             },
             "packageName": "libricochet",
             "configFile": "CPackClientConfig.cmake",

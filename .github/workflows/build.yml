@@ -1,0 +1,194 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  VCPKG_COMMIT: ef7dbf94b9198bc58f45951adcf1f041fcbc5ea0
+
+jobs:
+  debian:
+    name: debian-x64
+    runs-on: ubuntu-latest
+    container: debian:13
+    env:
+      TARGET_OS: debian-trixie
+      TARGET_ARCH: x64
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build git file dpkg-dev \
+            libssl-dev \
+            libboost-system-dev \
+            libboost-test-dev \
+            libboost-program-options-dev \
+            libboost-coroutine-dev \
+            libboost-log-dev
+
+      - name: Configure, build and test (static-relwithdebinfo)
+        run: |
+          cmake --preset static-relwithdebinfo
+          cmake --build --preset static-relwithdebinfo
+          ctest --preset static-relwithdebinfo
+
+      - name: Configure, build and test (shared-relwithdebinfo)
+        run: |
+          cmake --preset shared-relwithdebinfo
+          cmake --build --preset shared-relwithdebinfo
+          ctest --preset shared-relwithdebinfo
+
+      - name: Package (DEB)
+        run: |
+          cmake --cpack --preset debian-server
+          cmake --cpack --preset debian-client
+
+      - name: Upload DEB packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: ricochet-debian-x64
+          path: out/${{ env.TARGET_OS }}/${{ env.TARGET_ARCH }}/build/*.deb
+          if-no-files-found: error
+          retention-days: 7
+
+  fedora:
+    name: fedora-42-x64
+    runs-on: ubuntu-latest
+    container: fedora:42
+    env:
+      TARGET_OS: fedora-42
+      TARGET_ARCH: x64
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          dnf install -y \
+            gcc-c++ cmake ninja-build git file which rpm-build \
+            openssl openssl-devel \
+            boost-devel boost-static
+
+      - name: Configure, build and test (static-relwithdebinfo)
+        run: |
+          cmake --preset static-relwithdebinfo
+          cmake --build --preset static-relwithdebinfo
+          ctest --preset static-relwithdebinfo
+
+      - name: Configure, build and test (shared-relwithdebinfo)
+        run: |
+          cmake --preset shared-relwithdebinfo
+          cmake --build --preset shared-relwithdebinfo
+          ctest --preset shared-relwithdebinfo
+
+      - name: Package (RPM)
+        run: |
+          cmake --cpack --preset linux-server
+          cmake --cpack --preset linux-client
+
+      - name: Upload RPM packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: ricochet-fedora-x64
+          path: out/${{ env.TARGET_OS }}/${{ env.TARGET_ARCH }}/build/*.rpm
+          if-no-files-found: error
+          retention-days: 7
+
+  windows:
+    name: windows-x64
+    runs-on: windows-latest
+    env:
+      TARGET_OS: windows
+      TARGET_ARCH: x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT }}
+          runVcpkgInstall: true
+
+      - name: Configure, build and test (static-relwithdebinfo)
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: static-relwithdebinfo
+          buildPreset: static-relwithdebinfo
+          testPreset: static-relwithdebinfo
+
+      - name: Configure, build and test (shared-relwithdebinfo)
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: shared-relwithdebinfo
+          buildPreset: shared-relwithdebinfo
+          testPreset: shared-relwithdebinfo
+
+      - name: Package (ZIP)
+        run: |
+          cmake --cpack --preset server-archive
+          cmake --cpack --preset client-archive
+
+      - name: Upload ZIP archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: ricochet-windows-x64
+          path: out/${{ env.TARGET_OS }}/${{ env.TARGET_ARCH }}/build/*.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  macos:
+    name: macos-arm64
+    runs-on: macos-latest
+    env:
+      TARGET_OS: darwin
+      TARGET_ARCH: arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT }}
+          runVcpkgInstall: true
+
+      - name: Configure, build and test (static-relwithdebinfo)
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: static-relwithdebinfo
+          buildPreset: static-relwithdebinfo
+          testPreset: static-relwithdebinfo
+
+      - name: Configure, build and test (shared-relwithdebinfo)
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: shared-relwithdebinfo
+          buildPreset: shared-relwithdebinfo
+          testPreset: shared-relwithdebinfo
+
+      - name: Package (ZIP)
+        run: |
+          cmake --cpack --preset server-archive
+          cmake --cpack --preset client-archive
+
+      - name: Upload ZIP archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: ricochet-macos-arm64
+          path: out/${{ env.TARGET_OS }}/${{ env.TARGET_ARCH }}/build/*.zip
+          if-no-files-found: error
+          retention-days: 7
