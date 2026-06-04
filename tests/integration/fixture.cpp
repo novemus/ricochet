@@ -61,6 +61,7 @@ std::shared_ptr<ricochet::server> integration_test_fixture::create_server(bool u
     config.server_key = ctx.server_key;
     config.ca_cert = using_ca ? ctx.ca_cert : std::filesystem::path();
     config.client_repo = ctx.repo;
+    config.wait_timeout = boost::posix_time::seconds(2);
     config.idle_timeout = boost::posix_time::seconds(2);
     config.client_relay_limit = client_limit;
     config.total_relay_limit = total_limit;

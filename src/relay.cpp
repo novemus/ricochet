@@ -82,17 +82,18 @@ boost::asio::ip::address get_outgoing_address(boost::asio::io_context& io, const
     return address.is_unspecified() ? get_outgoing_address(io, address.is_v4()) : address;
 }
 
-tcp_relay::tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds idle, cleanup_function clean)
+tcp_relay::tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds wait, boost::posix_time::seconds idle, cleanup_function clean)
     : m_io(io)
     , m_strand(io)
     , m_server(io)
     , m_one(io)
     , m_two(io)
-    , m_idle_timer(io)
-    , m_retry_timer(io)
+    , m_timer(io)
+    , m_defer(io)
+    , m_wait(wait)
     , m_idle(idle)
     , m_clean(clean)
-    , m_timestamp(std::chrono::steady_clock::now())
+    , m_timestamp(std::chrono::steady_clock::now() - std::chrono::seconds(5))
     , m_reconnects(0)
 {
     auto protocol = proto == protocol::tcp6 ? boost::asio::ip::tcp::v6() : boost::asio::ip::tcp::v4();
@@ -130,7 +131,7 @@ void tcp_relay::start(const peer& red, const peer& blue)
     _inf_ << "TCP relay " << this << " starting, red=" << red << ", blue=" << blue;
 
     start_relay(red, blue);
-    watch_activity();
+    watch_activity(m_wait);
 }
 
 void tcp_relay::close()
@@ -146,10 +147,10 @@ void tcp_relay::close()
     });
 }
 
-void tcp_relay::watch_activity()
+void tcp_relay::watch_activity(boost::posix_time::seconds timeout)
 {
-    m_idle_timer.expires_from_now(m_idle);
-    m_idle_timer.async_wait(m_strand.wrap([this, weak = weak_from_this()](const boost::system::error_code& ec)
+    m_timer.expires_from_now(timeout);
+    m_timer.async_wait(m_strand.wrap([this, weak = weak_from_this(), timeout](const boost::system::error_code& ec)
     {
         auto self = weak.lock();
         if (!self)
@@ -161,14 +162,14 @@ void tcp_relay::watch_activity()
                 std::chrono::steady_clock::now() - m_timestamp
             );
 
-            if (expired.count() >= m_idle.total_seconds())
+            if (expired.count() >= timeout.total_seconds())
             {
-                _inf_ << "TCP relay " << this << " idle timeout";
+                _inf_ << "TCP relay " << this << " timeout";
                 break_relay();
             }
             else
             {
-                watch_activity();
+                watch_activity(m_idle);
             }
         }
     }));
@@ -182,6 +183,8 @@ void tcp_relay::start_relay(const peer& one, const peer& two)
 
         boost::system::error_code ec;
         m_server.close(ec);
+
+        m_timestamp = std::chrono::steady_clock::now();
 
         transmit_data(m_one, m_two);
         transmit_data(m_two, m_one);
@@ -285,8 +288,8 @@ void tcp_relay::start_relay(const peer& one, const peer& two)
                 m_reconnects++;
                 _wrn_ << "TCP relay " << this << " connection refused to peer " << ep << ", retrying in " << m_reconnects * 2 << " seconds";
 
-                m_retry_timer.expires_from_now(boost::posix_time::seconds(m_reconnects * 2));
-                m_retry_timer.async_wait(m_strand.wrap([this, weak = weak_from_this(), one, two](const boost::system::error_code& ec)
+                m_defer.expires_from_now(boost::posix_time::seconds(m_reconnects * 2));
+                m_defer.async_wait(m_strand.wrap([this, weak = weak_from_this(), one, two](const boost::system::error_code& ec)
                 {
                     auto self = weak.lock();
                     if (!self)
@@ -354,8 +357,8 @@ void tcp_relay::break_relay()
     m_one.close(ec);
     m_two.close(ec);
 
-    m_idle_timer.cancel(ec);
-    m_retry_timer.cancel(ec);
+    m_timer.cancel(ec);
+    m_defer.cancel(ec);
 
     if (m_clean)
     {
@@ -366,13 +369,15 @@ void tcp_relay::break_relay()
     }
 }
 
-udp_relay::udp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds idle, cleanup_function clean)
+udp_relay::udp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds wait, boost::posix_time::seconds idle, cleanup_function clean)
     : m_io(io)
     , m_strand(io)
     , m_socket(io, proto == protocol::udp6 ? boost::asio::ip::udp::v6() : boost::asio::ip::udp::v4())
     , m_timer(io)
+    , m_wait(wait)
     , m_idle(idle)
     , m_clean(clean)
+    , m_timestamp(std::chrono::steady_clock::now() - std::chrono::seconds(5))
 {
     m_socket.set_option(boost::asio::socket_base::reuse_address(true));
     m_socket.bind(boost::asio::ip::udp::endpoint(proto == protocol::udp6 ? boost::asio::ip::udp::v6() : boost::asio::ip::udp::v4(), 0));
@@ -405,7 +410,7 @@ void udp_relay::start(const peer& red, const peer& blue)
     m_two = boost::asio::ip::udp::endpoint(blue.location().address(), blue.location().port());
 
     read_socket();
-    watch_activity();
+    watch_activity(m_wait);
 }
 
 void udp_relay::close()
@@ -421,29 +426,29 @@ void udp_relay::close()
     });
 }
 
-void udp_relay::watch_activity()
+void udp_relay::watch_activity(boost::posix_time::seconds timeout)
 {
-    m_timer.expires_from_now(m_idle);
-    m_timer.async_wait(m_strand.wrap([this, weak = weak_from_this()](const boost::system::error_code& ec)
+    m_timer.expires_from_now(timeout);
+    m_timer.async_wait(m_strand.wrap([this, weak = weak_from_this(), timeout](const boost::system::error_code& ec)
     {
         auto self = weak.lock();
         if (!self)
             return;
-        
+
         if (!ec)
         {
             auto expired = std::chrono::duration_cast<std::chrono::seconds>(
                 std::chrono::steady_clock::now() - m_timestamp
             );
 
-            if (expired.count() >= m_idle.total_seconds())
+            if (expired.count() >= timeout.total_seconds())
             {
-                _inf_ << "UDP relay " << this << " idle timeout";
+                _inf_ << "UDP relay " << this << " timeout";
                 break_relay();
             }
             else
             {
-                watch_activity();
+                watch_activity(m_idle);
             }
         }
     }));
@@ -478,13 +483,11 @@ void udp_relay::read_socket()
                     if (one_address_matches && one_port_matches)
                     {
                         _dbg_ << "UDP relay " << this << " connected peer " << *peer;
-                        m_timestamp = std::chrono::steady_clock::now();
                         m_one = *peer;
                     }
                     else if (two_address_matches && two_port_matches)
                     {
                         _dbg_ << "UDP relay " << this << " connected peer " << *peer;
-                        m_timestamp = std::chrono::steady_clock::now();
                         m_two = *peer;
                     }
                     else
@@ -494,6 +497,7 @@ void udp_relay::read_socket()
 
                     if (can_transmit())
                     {
+                        m_timestamp = std::chrono::steady_clock::now();
                         _inf_ << "UDP relay " << this << " is active";
                     }
                 }

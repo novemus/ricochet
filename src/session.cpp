@@ -7,11 +7,13 @@ namespace ricochet {
 session::session(boost::asio::io_context& io,
                  std::shared_ptr<boost::asio::ssl::context> ssl,
                  boost::asio::ssl::stream<boost::asio::ip::tcp::socket> socket,
+                 boost::posix_time::seconds wait,
                  boost::posix_time::seconds idle)
     : m_io(io)
     , m_ssl(ssl)
     , m_socket(std::move(socket))
     , m_timer(m_io)
+    , m_wait(wait)
     , m_idle(idle)
     , m_query(4096)
     , m_break(false)
@@ -287,11 +289,11 @@ void session::handle_provide_query()
     {
         case ricochet::protocol::tcp4:
         case ricochet::protocol::tcp6:
-            m_relay = std::make_shared<ricochet::tcp_relay>(m_io, proto, m_idle, m_clean);
+            m_relay = std::make_shared<ricochet::tcp_relay>(m_io, proto, m_wait, m_idle, m_clean);
             break;
         case ricochet::protocol::udp4:
         case ricochet::protocol::udp6:
-            m_relay = std::make_shared<ricochet::udp_relay>(m_io, proto, m_idle, m_clean);
+            m_relay = std::make_shared<ricochet::udp_relay>(m_io, proto, m_wait, m_idle, m_clean);
             break;
         default:
             throw malformed_message("Unsupported protocol");
@@ -369,7 +371,7 @@ void session::start_timer()
 
         if (!ec)
         {
-            _inf_ << "Session " << this << " idle timeout";
+            _inf_ << "Session " << this << " timeout";
 
             std::lock_guard<std::mutex> lock(m_mutex);
             m_break = true;

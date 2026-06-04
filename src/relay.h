@@ -30,8 +30,9 @@ class tcp_relay : public relay, public std::enable_shared_from_this<tcp_relay>
     boost::asio::ip::tcp::acceptor m_server;
     boost::asio::ip::tcp::socket m_one;
     boost::asio::ip::tcp::socket m_two;
-    boost::asio::deadline_timer m_idle_timer;
-    boost::asio::deadline_timer m_retry_timer;
+    boost::asio::deadline_timer m_timer;
+    boost::asio::deadline_timer m_defer;
+    boost::posix_time::seconds m_wait;
     boost::posix_time::seconds m_idle;
     cleanup_function m_clean;
     std::chrono::steady_clock::time_point m_timestamp;
@@ -39,7 +40,7 @@ class tcp_relay : public relay, public std::enable_shared_from_this<tcp_relay>
 
 public:
 
-    tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds idle, cleanup_function clean);
+    tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds wait, boost::posix_time::seconds idle, cleanup_function clean);
     ~tcp_relay() override;
     protocol get_protocol() const override;
     endpoint get_endpoint() const override;
@@ -51,7 +52,7 @@ private:
     void start_relay(const peer& one, const peer& two);
     void transmit_data(boost::asio::ip::tcp::socket& from, boost::asio::ip::tcp::socket& to);
     void break_relay();
-    void watch_activity();
+    void watch_activity(boost::posix_time::seconds timeout);
 };
 
 class udp_relay : public relay, public std::enable_shared_from_this<udp_relay>
@@ -64,13 +65,14 @@ class udp_relay : public relay, public std::enable_shared_from_this<udp_relay>
     boost::asio::ip::udp::endpoint m_one;
     boost::asio::ip::udp::endpoint m_two;
     boost::asio::deadline_timer m_timer;
+    boost::posix_time::seconds m_wait;
     boost::posix_time::seconds m_idle;
     cleanup_function m_clean;
     std::chrono::steady_clock::time_point m_timestamp;
 
 public:
 
-    udp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds idle, cleanup_function clean);
+    udp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds wait, boost::posix_time::seconds idle, cleanup_function clean);
     ~udp_relay() override;
     protocol get_protocol() const override;
     endpoint get_endpoint() const override;
@@ -82,7 +84,7 @@ private:
     bool can_transmit() const;
     void read_socket();
     void break_relay();
-    void watch_activity();
+    void watch_activity(boost::posix_time::seconds timeout);
 };
 
 }

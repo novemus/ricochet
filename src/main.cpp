@@ -24,7 +24,8 @@ int main(int argc, char* argv[])
             ("key", po::value<std::filesystem::path>()->default_value("server.key"), "SSL private key file")
             ("ca", po::value<std::filesystem::path>()->default_value(""), "SSL CA certificate file")
             ("repo", po::value<std::filesystem::path>()->default_value(std::filesystem::current_path()), "path to client SSL certificate repository")
-            ("idle", po::value<int>()->default_value(180), "idle session timeout in seconds")
+            ("wait", po::value<int>()->default_value(30), "wait for relay connection (seconds)")
+            ("idle", po::value<int>()->default_value(180), "idle relay timeout (seconds)")
             ("quota", po::value<size_t>()->default_value(10), "maximum relays per client")
             ("limit", po::value<size_t>()->default_value(100), "maximum relays count")
             ("report", po::value<std::string>()->default_value("info"), "report level (trace, debug, info, warning, error, fatal)")
@@ -46,6 +47,12 @@ int main(int argc, char* argv[])
         if (vm.count("journal"))
         {
             ricochet::logging::init_file_logging(vm["journal"].as<std::filesystem::path>().string(), report);
+        }
+
+        if (vm["wait"].as<int>() <= 0)
+        {
+            _ftl_ << "Wait timeout must be positive";
+            return 1;
         }
 
         if (vm["idle"].as<int>() <= 0)
@@ -75,6 +82,7 @@ int main(int argc, char* argv[])
         config.server_key = vm["key"].as<std::filesystem::path>();
         config.ca_cert = vm["ca"].as<std::filesystem::path>();
         config.client_repo = vm["repo"].as<std::filesystem::path>();
+        config.wait_timeout = boost::posix_time::seconds(vm["wait"].as<int>());
         config.idle_timeout = boost::posix_time::seconds(vm["idle"].as<int>());
         config.client_relay_limit = vm["quota"].as<size_t>();
         config.total_relay_limit = vm["limit"].as<size_t>();
@@ -89,6 +97,7 @@ int main(int argc, char* argv[])
         _inf_ << "SSL private key: " << config.server_key;
         _inf_ << "CA certificate: " << config.ca_cert;
         _inf_ << "Client repository: " << config.client_repo;
+        _inf_ << "Wait timeout: " << config.wait_timeout.total_seconds() << " seconds";
         _inf_ << "Idle timeout: " << config.idle_timeout.total_seconds() << " seconds";
         _inf_ << "Max sessions per client: " << config.client_relay_limit;
         _inf_ << "Max total sessions: " << config.total_relay_limit;

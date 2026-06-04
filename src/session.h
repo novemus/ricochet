@@ -15,6 +15,7 @@ class session : public std::enable_shared_from_this<session>
     std::shared_ptr<boost::asio::ssl::context> m_ssl;
     boost::asio::ssl::stream<boost::asio::ip::tcp::socket> m_socket;
     boost::asio::deadline_timer m_timer;
+    boost::posix_time::seconds m_wait;
     boost::posix_time::seconds m_idle;
     std::shared_ptr<ricochet::relay> m_relay;
     ricochet::query m_query;
@@ -27,6 +28,7 @@ public:
     session(boost::asio::io_context& io,
             std::shared_ptr<boost::asio::ssl::context> ssl,
             boost::asio::ssl::stream<boost::asio::ip::tcp::socket> socket,
+            boost::posix_time::seconds wait,
             boost::posix_time::seconds idle);
     ~session();
 

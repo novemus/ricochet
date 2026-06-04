@@ -19,19 +19,21 @@ struct config
     std::filesystem::path server_key;
     std::filesystem::path ca_cert;
     std::filesystem::path client_repo;
+    boost::posix_time::seconds wait_timeout;
     boost::posix_time::seconds idle_timeout;
     size_t client_relay_limit;
     size_t total_relay_limit;
 
-    config() 
+    config()
         : server_endpoint()
         , server_cert("")
         , server_key("")
         , ca_cert("")
         , client_repo("")
-        , idle_timeout(boost::posix_time::seconds(300))
-        , client_relay_limit(100)
-        , total_relay_limit(1000)
+        , wait_timeout(boost::posix_time::seconds(30))
+        , idle_timeout(boost::posix_time::seconds(180))
+        , client_relay_limit(10)
+        , total_relay_limit(100)
     {}
 };
 

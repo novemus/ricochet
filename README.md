@@ -74,7 +74,8 @@ Server options:
 | `--key` | `server.key` | Server private key |
 | `--ca` | — | CA for client verification (optional) |
 | `--repo` | `.` | Client certificate repository |
-| `--idle` | `180` | Idle session timeout in seconds |
+| `--wait` | `30` | Wait for relay connection (seconds) |
+| `--idle` | `180` | Idle relay timeout (seconds) |
 | `--quota` | `10` | Maximum sessions per client |
 | `--limit` | `100` | Maximum concurrent sessions |
 | `--report` | `info` | Logging level (trace, debug, info, warning, error, fatal) |
