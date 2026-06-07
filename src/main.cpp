@@ -22,7 +22,7 @@ int main(int argc, char* argv[])
             ("port", po::value<uint16_t>()->default_value(443), "listen port")
             ("cert", po::value<std::filesystem::path>()->default_value("server.pem"), "SSL certificate file")
             ("key", po::value<std::filesystem::path>()->default_value("server.key"), "SSL private key file")
-            ("ca", po::value<std::filesystem::path>()->default_value(""), "SSL CA certificate file")
+            ("ca", po::value<std::filesystem::path>()->default_value(""), "CA certificate file")
             ("repo", po::value<std::filesystem::path>()->default_value(std::filesystem::current_path()), "path to client SSL certificate repository")
             ("wait", po::value<int>()->default_value(30), "wait for relay connection (seconds)")
             ("idle", po::value<int>()->default_value(180), "idle relay timeout (seconds)")
@@ -88,7 +88,7 @@ int main(int argc, char* argv[])
         config.total_relay_limit = vm["limit"].as<size_t>();
 
         boost::asio::io_context io;
-        ricochet::server server(io, config);
+        auto server = std::make_shared<ricochet::server>(io, config);
 
         unsigned int thread_count = std::max(4u, std::thread::hardware_concurrency());
 
@@ -103,7 +103,7 @@ int main(int argc, char* argv[])
         _inf_ << "Max total sessions: " << config.total_relay_limit;
         _inf_ << "Using " << thread_count << " worker threads";
 
-        server.start();
+        server->start();
 
         std::vector<std::thread> workers;
         for (unsigned int i = 1; i < thread_count; ++i)

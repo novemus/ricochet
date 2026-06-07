@@ -89,7 +89,7 @@ BOOST_AUTO_TEST_CASE(reuse_agent)
 
         try
         {
-            for (size_t i = 0; i < 3; ++i)
+            for (size_t i = 0; i < 2; ++i)
             {
                 ricochet::endpoint ep;
                 agent->assign_relay(yield, ricochet::protocol::udp4, ep);

@@ -176,8 +176,8 @@ if(NOT CMAKE_SKIP_INSTALL_RULES)
         "${CMAKE_CURRENT_SOURCE_DIR}/CHANGELOG.md"
         )
 
-    install(FILES ${DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/ricochet" COMPONENT server_files)
-    install(FILES ${DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/libricochet" COMPONENT client_files)
+    install(FILES ${DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/ricochet-server" COMPONENT server_files)
+    install(FILES ${DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/ricochet-client" COMPONENT client_files)
 
     if (CMAKE_HOST_SYSTEM_NAME MATCHES "Linux")
         cmake_host_system_information(RESULT DISTR QUERY DISTRIB_ID)
@@ -194,8 +194,8 @@ if(NOT CMAKE_SKIP_INSTALL_RULES)
                 "${CMAKE_CURRENT_SOURCE_DIR}/linux/copyright"
                 "${CMAKE_CURRENT_SOURCE_DIR}/linux/README.Debian"
                 )
-            install(FILES ${DEBIAN_DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/ricochet" COMPONENT server_files)
-            install(FILES ${DEBIAN_DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/libricochet" COMPONENT client_files)
+            install(FILES ${DEBIAN_DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/ricochet-server" COMPONENT server_files)
+            install(FILES ${DEBIAN_DOC_FILES} DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/ricochet-client" COMPONENT client_files)
         else()
             cmake_host_system_information(RESULT DISTR_VERSION QUERY DISTRIB_VERSION_ID)
             if (DISTR MATCHES "fedora")
@@ -242,8 +242,8 @@ if(NOT CMAKE_SKIP_INSTALL_RULES)
 
     set(CPACK_ARCHIVE_COMPONENT_INSTALL ON)
 
-    string(TOLOWER "ricochet-${PROJECT_VERSION}-${CPACK_PACKAGE_RELEASE}-${CMAKE_HOST_SYSTEM_NAME}-${CMAKE_HOST_SYSTEM_PROCESSOR}" SERVER_ARCHIVE_FILE_NAME)
-    string(TOLOWER "libricochet-${PROJECT_VERSION}-${CPACK_PACKAGE_RELEASE}-${CMAKE_HOST_SYSTEM_NAME}-${CMAKE_HOST_SYSTEM_PROCESSOR}" CLIENT_ARCHIVE_FILE_NAME)
+    string(TOLOWER "ricochet-server-${PROJECT_VERSION}-${CPACK_PACKAGE_RELEASE}-${CMAKE_HOST_SYSTEM_NAME}-${CMAKE_HOST_SYSTEM_PROCESSOR}" SERVER_ARCHIVE_FILE_NAME)
+    string(TOLOWER "ricochet-client-${PROJECT_VERSION}-${CPACK_PACKAGE_RELEASE}-${CMAKE_HOST_SYSTEM_NAME}-${CMAKE_HOST_SYSTEM_PROCESSOR}" CLIENT_ARCHIVE_FILE_NAME)
 
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/CPackServerConfig.cmake"
         "include(${CMAKE_CURRENT_BINARY_DIR}/CPackConfig.cmake)\n"

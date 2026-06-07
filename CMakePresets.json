@@ -183,7 +183,7 @@
     "packagePresets": [
         {
             "name": "debian-server",
-            "displayName": "ricochet (DEB)",
+            "displayName": "ricochet-server (DEB)",
             "description": "Server package",
             "configurePreset": "static-relwithdebinfo",
             "condition": {
@@ -203,12 +203,12 @@
             "configurations": [
                 "RelWithDebInfo"
             ],
-            "packageName": "ricochet",
+            "packageName": "ricochet-server",
             "packageDirectory": ".."
         },
         {
             "name": "debian-client",
-            "displayName": "libricochet (DEB)",
+            "displayName": "ricochet-client (DEB)",
             "description": "Client package",
             "configurePreset": "static-relwithdebinfo",
             "condition": {
@@ -230,12 +230,12 @@
             "configurations": [
                 "RelWithDebInfo"
             ],
-            "packageName": "libricochet",
+            "packageName": "ricochet-client",
             "packageDirectory": ".."
         },
         {
             "name": "linux-server",
-            "displayName": "ricochet (RPM)",
+            "displayName": "ricochet-server (RPM)",
             "description": "Server package",
             "configurePreset": "static-relwithdebinfo",
             "condition": {
@@ -255,12 +255,12 @@
             "configurations": [
                 "RelWithDebInfo"
             ],
-            "packageName": "ricochet",
+            "packageName": "ricochet-server",
             "packageDirectory": ".."
         },
         {
             "name": "linux-client",
-            "displayName": "libricochet (RPM)",
+            "displayName": "ricochet-client (RPM)",
             "description": "Client package",
             "configurePreset": "static-relwithdebinfo",
             "condition": {
@@ -282,12 +282,12 @@
             "configurations": [
                 "RelWithDebInfo"
             ],
-            "packageName": "libricochet",
+            "packageName": "ricochet-client",
             "packageDirectory": ".."
         },
         {
             "name": "server-archive",
-            "displayName": "ricochet (ZIP)",
+            "displayName": "ricochet-server (ZIP)",
             "description": "Server archive",
             "configurePreset": "static-relwithdebinfo",
             "generators": [
@@ -299,13 +299,13 @@
             "variables": {
                 "CPACK_COMPONENTS_ALL": "server_files"
             },
-            "packageName": "ricochet",
+            "packageName": "ricochet-server",
             "configFile": "CPackServerConfig.cmake",
             "packageDirectory": ".."
         },
         {
             "name": "client-archive",
-            "displayName": "libricochet (ZIP)",
+            "displayName": "ricochet-client (ZIP)",
             "description": "Client archive",
             "configurePreset": "static-relwithdebinfo",
             "generators": [
@@ -318,7 +318,7 @@
                 "CPACK_COMPONENTS_ALL": "client_files",
                 "CPACK_INSTALL_CMAKE_PROJECTS": "../static-relwithdebinfo;ricochet;ALL;/;../shared-relwithdebinfo;ricochet;ALL;/"
             },
-            "packageName": "libricochet",
+            "packageName": "ricochet-client",
             "configFile": "CPackClientConfig.cmake",
             "packageDirectory": ".."
         }

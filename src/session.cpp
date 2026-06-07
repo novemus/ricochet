@@ -61,6 +61,12 @@ void session::close()
         std::lock_guard<std::mutex> lock(m_mutex);
         m_break = true;
 
+        if (m_relay)
+        {
+            m_relay->close();
+            m_relay.reset();
+        }
+
         boost::system::error_code ec;
         m_socket.lowest_layer().cancel(ec);
     });
@@ -78,12 +84,6 @@ void session::do_close()
         boost::system::error_code ec;
         m_socket.lowest_layer().shutdown(boost::asio::socket_base::shutdown_type::shutdown_both, ec);
         m_socket.lowest_layer().close(ec);
-    }
-
-    if (m_relay)
-    {
-        m_relay->close();
-        m_relay.reset();
     }
 
     if (m_clean)
