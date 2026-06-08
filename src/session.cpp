@@ -27,7 +27,7 @@ session::~session()
     do_close();
 }
 
-void session::start(bool reject, cleanup_function clean)
+void session::start(bool reject, final_callback clean)
 {
     _inf_ << "Session " << this << (reject ? " reject..." : " start...");
 
@@ -39,7 +39,7 @@ void session::start(bool reject, cleanup_function clean)
 
         std::lock_guard<std::mutex> lock(m_mutex);
 
-        m_clean = clean;
+        m_final = clean;
 
         if (reject)
             send_error_reply(ricochet::failure::limit_reached);
@@ -67,6 +67,12 @@ void session::close()
             m_relay.reset();
         }
 
+        if (m_final)
+        {
+            m_final();
+            m_final = nullptr;
+        }
+
         boost::system::error_code ec;
         m_socket.lowest_layer().cancel(ec);
     });
@@ -79,23 +85,23 @@ void session::do_close()
 
     if (m_socket.lowest_layer().is_open())
     {
-        _inf_ << "Session " << this << " closed";
-
         boost::system::error_code ec;
         m_socket.lowest_layer().shutdown(boost::asio::socket_base::shutdown_type::shutdown_both, ec);
         m_socket.lowest_layer().close(ec);
+
+        _inf_ << "Session " << this << " closed";
     }
 
-    if (m_clean)
+    if (m_final)
     {
-        m_clean();
-        m_clean = nullptr;
+        m_final();
+        m_final = nullptr;
     }
 }
 
 void session::do_shutdown()
 {
-    _inf_ << "Session " << this << " shutdown...";
+    _trc_("Session " << this << " shutdown...");
 
     boost::system::error_code ec;
     m_timer.cancel(ec);
@@ -106,7 +112,7 @@ void session::do_shutdown()
         if (!self)
             return;
 
-        _inf_ << "Session " << this << " shutdown" << (err ? ": "  + err.message() : "");
+        _trc_("Session " << this << " shutdown" << (err ? ": "  + err.message() : ""));
 
         std::lock_guard<std::mutex> lock(m_mutex);
         do_close();
@@ -135,7 +141,7 @@ void session::do_read_header()
 
                 if (m_break)
                 {
-                    do_close();
+                    do_shutdown();
                 }
                 else if (size == query::header_size)
                 {
@@ -186,7 +192,7 @@ void session::do_read_payload()
 
                 if (m_break)
                 {
-                    do_close();
+                    do_shutdown();
                 }
                 else if (size == m_query.length())
                 {
@@ -263,7 +269,7 @@ void session::do_write(const ricochet::reply& msg)
             }
             else if (m_break)
             {
-                do_close();
+                do_shutdown();
             }
             else if (msg.type() == ricochet::reply::kind::binding)
             {
@@ -289,17 +295,16 @@ void session::handle_provide_query()
     {
         case ricochet::protocol::tcp4:
         case ricochet::protocol::tcp6:
-            m_relay = std::make_shared<ricochet::tcp_relay>(m_io, proto, m_wait, m_idle, m_clean);
+            m_relay = std::make_shared<ricochet::tcp_relay>(m_io, proto, m_wait, m_idle);
             break;
         case ricochet::protocol::udp4:
         case ricochet::protocol::udp6:
-            m_relay = std::make_shared<ricochet::udp_relay>(m_io, proto, m_wait, m_idle, m_clean);
+            m_relay = std::make_shared<ricochet::udp_relay>(m_io, proto, m_wait, m_idle);
             break;
         default:
             throw malformed_message("Unsupported protocol");
     }
 
-    m_clean = nullptr;
     do_write(ricochet::reply::make_binding_reply(m_relay->get_endpoint()));
 }
 
@@ -344,7 +349,7 @@ void session::handle_connect_query()
             return;
         }
 
-        m_relay->start(red, blue);
+        m_relay->start(red, blue, std::move(m_final));
 
         do_write(ricochet::reply::make_confirm_reply());
     }

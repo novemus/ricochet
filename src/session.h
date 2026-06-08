@@ -19,7 +19,7 @@ class session : public std::enable_shared_from_this<session>
     boost::posix_time::seconds m_idle;
     std::shared_ptr<ricochet::relay> m_relay;
     ricochet::query m_query;
-    cleanup_function m_clean;
+    final_callback m_final;
     bool m_break;
     std::mutex m_mutex;
 
@@ -32,7 +32,7 @@ public:
             boost::posix_time::seconds idle);
     ~session();
 
-    void start(bool reject, cleanup_function clean);
+    void start(bool reject, final_callback final);
     void close();
 
 private:

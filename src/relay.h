@@ -12,14 +12,14 @@ bool is_ip6_available(boost::asio::io_context& io);
 boost::asio::ip::address get_outgoing_address(boost::asio::io_context& io, bool ip4);
 boost::asio::ip::address get_outgoing_address(boost::asio::io_context& io, const boost::asio::ip::address& address);
 
-using cleanup_function = std::function<void()>;
+using final_callback = std::function<void()>;
 
 struct relay
 {
     virtual ~relay() {}
     virtual protocol get_protocol() const = 0;
     virtual endpoint get_endpoint() const = 0;
-    virtual void start(const peer& red, const peer& blue) = 0;
+    virtual void start(const peer& red, const peer& blue, final_callback&& final) = 0;
     virtual void close() = 0;
 };
 
@@ -34,17 +34,17 @@ class tcp_relay : public relay, public std::enable_shared_from_this<tcp_relay>
     boost::asio::deadline_timer m_defer;
     boost::posix_time::seconds m_wait;
     boost::posix_time::seconds m_idle;
-    cleanup_function m_clean;
+    final_callback m_final;
     std::chrono::steady_clock::time_point m_timestamp;
     int m_reconnects;
 
 public:
 
-    tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds wait, boost::posix_time::seconds idle, cleanup_function clean);
+    tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds wait, boost::posix_time::seconds idle);
     ~tcp_relay() override;
     protocol get_protocol() const override;
     endpoint get_endpoint() const override;
-    void start(const peer& red, const peer& blue) override;
+    void start(const peer& red, const peer& blue, final_callback&& final) override;
     void close() override;
 
 private:
@@ -67,16 +67,16 @@ class udp_relay : public relay, public std::enable_shared_from_this<udp_relay>
     boost::asio::deadline_timer m_timer;
     boost::posix_time::seconds m_wait;
     boost::posix_time::seconds m_idle;
-    cleanup_function m_clean;
+    final_callback m_final;
     std::chrono::steady_clock::time_point m_timestamp;
 
 public:
 
-    udp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds wait, boost::posix_time::seconds idle, cleanup_function clean);
+    udp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds wait, boost::posix_time::seconds idle);
     ~udp_relay() override;
     protocol get_protocol() const override;
     endpoint get_endpoint() const override;
-    void start(const peer& red, const peer& blue) override;
+    void start(const peer& red, const peer& blue, final_callback&& final) override;
     void close() override;
 
 private:

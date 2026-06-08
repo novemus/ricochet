@@ -82,7 +82,7 @@ boost::asio::ip::address get_outgoing_address(boost::asio::io_context& io, const
     return address.is_unspecified() ? get_outgoing_address(io, address.is_v4()) : address;
 }
 
-tcp_relay::tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds wait, boost::posix_time::seconds idle, cleanup_function clean)
+tcp_relay::tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds wait, boost::posix_time::seconds idle)
     : m_io(io)
     , m_strand(io)
     , m_server(io)
@@ -92,7 +92,6 @@ tcp_relay::tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_t
     , m_defer(io)
     , m_wait(wait)
     , m_idle(idle)
-    , m_clean(clean)
     , m_timestamp(std::chrono::steady_clock::now() - std::chrono::seconds(5))
     , m_reconnects(0)
 {
@@ -107,13 +106,13 @@ tcp_relay::tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_t
     m_server.bind(boost::asio::ip::tcp::endpoint(protocol, 0));
     m_server.listen();
 
-    _trc_("TCP relay " << this << " created");
+    _inf_ << "TCP relay " << this << " created on " << m_server.local_endpoint();
 }
 
 tcp_relay::~tcp_relay()
 {
-    _trc_("TCP relay " << this << " destroyed");
     break_relay();
+    _trc_("TCP relay " << this << " destroyed");
 }
 
 protocol tcp_relay::get_protocol() const
@@ -126,9 +125,11 @@ endpoint tcp_relay::get_endpoint() const
     return endpoint(get_outgoing_address(m_io, m_server.local_endpoint().address()), m_server.local_endpoint().port());
 }
 
-void tcp_relay::start(const peer& red, const peer& blue)
+void tcp_relay::start(const peer& red, const peer& blue, final_callback&& final)
 {
     _inf_ << "TCP relay " << this << " starting, red=" << red << ", blue=" << blue;
+
+    m_final = std::move(final);
 
     start_relay(red, blue);
     watch_activity(m_wait);
@@ -360,35 +361,34 @@ void tcp_relay::break_relay()
     m_timer.cancel(ec);
     m_defer.cancel(ec);
 
-    if (m_clean)
+    if (m_final)
     {
         _inf_ << "TCP relay " << this << " closed";
 
-        m_clean();
-        m_clean = nullptr;
+        m_final();
+        m_final = nullptr;
     }
 }
 
-udp_relay::udp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds wait, boost::posix_time::seconds idle, cleanup_function clean)
+udp_relay::udp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds wait, boost::posix_time::seconds idle)
     : m_io(io)
     , m_strand(io)
     , m_socket(io, proto == protocol::udp6 ? boost::asio::ip::udp::v6() : boost::asio::ip::udp::v4())
     , m_timer(io)
     , m_wait(wait)
     , m_idle(idle)
-    , m_clean(clean)
     , m_timestamp(std::chrono::steady_clock::now() - std::chrono::seconds(5))
 {
     m_socket.set_option(boost::asio::socket_base::reuse_address(true));
     m_socket.bind(boost::asio::ip::udp::endpoint(proto == protocol::udp6 ? boost::asio::ip::udp::v6() : boost::asio::ip::udp::v4(), 0));
 
-    _trc_("UDP relay " << this << " created (" << proto << ")");
+    _inf_ << "UDP relay " << this << " created on " << m_socket.local_endpoint();
 }
 
 udp_relay::~udp_relay()
 {
-    _trc_("UDP relay " << this << " destroyed");
     break_relay();
+    _trc_("UDP relay " << this << " destroyed");
 }
 
 protocol udp_relay::get_protocol() const
@@ -402,12 +402,13 @@ endpoint udp_relay::get_endpoint() const
     return endpoint(get_outgoing_address(m_io, m_socket.local_endpoint().address()), m_socket.local_endpoint().port());
 }
 
-void udp_relay::start(const peer& red, const peer& blue)
+void udp_relay::start(const peer& red, const peer& blue, final_callback&& final)
 {
     _inf_ << "UDP relay " << this << " starting, red=" << red << ", blue=" << blue;
 
     m_one = boost::asio::ip::udp::endpoint(red.location().address(), red.location().port());
     m_two = boost::asio::ip::udp::endpoint(blue.location().address(), blue.location().port());
+    m_final = std::move(final);
 
     read_socket();
     watch_activity(m_wait);
@@ -536,12 +537,12 @@ void udp_relay::break_relay()
     m_socket.close(ec);
     m_timer.cancel(ec);
 
-    if (m_clean)
+    if (m_final)
     {
         _inf_ << "UDP relay " << this << " closed";
 
-        m_clean();
-        m_clean = nullptr;
+        m_final();
+        m_final = nullptr;
     }
 }
 

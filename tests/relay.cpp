@@ -529,17 +529,13 @@ BOOST_AUTO_TEST_CASE(invalid_environment_variables)
 
 BOOST_AUTO_TEST_CASE(tcp4_relay_base)
 {
-    auto cp = std::make_shared<std::promise<void>>();
-    ricochet::cleanup_function cleanup = [cp]() mutable { cp->set_value(); };
-
     try
     {
         auto tcp_relay = std::make_shared<ricochet::tcp_relay>(
             io,
             ricochet::protocol::tcp4,
             boost::posix_time::seconds(30),
-            boost::posix_time::seconds(300),
-            cleanup
+            boost::posix_time::seconds(300)
         );
 
         BOOST_TEST(tcp_relay->get_protocol() == ricochet::protocol::tcp4);
@@ -554,7 +550,6 @@ BOOST_AUTO_TEST_CASE(tcp4_relay_base)
 
         tcp_relay->close();
 
-        BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
         BOOST_TEST_MESSAGE("TCP4 relay base test passed");
     }
     catch (const ricochet::unavailable_proto& e)
@@ -571,17 +566,13 @@ BOOST_AUTO_TEST_CASE(tcp4_relay_base)
 
 BOOST_AUTO_TEST_CASE(tcp6_relay_base)
 {
-    auto cp = std::make_shared<std::promise<void>>();
-    ricochet::cleanup_function cleanup = [cp]() mutable { cp->set_value(); };
-
     try
     {
         auto tcp_relay = std::make_shared<ricochet::tcp_relay>(
             io,
             ricochet::protocol::tcp6,
             boost::posix_time::seconds(30),
-            boost::posix_time::seconds(300),
-            cleanup
+            boost::posix_time::seconds(300)
         );
 
         BOOST_TEST(tcp_relay->get_protocol() == ricochet::protocol::tcp6);
@@ -596,7 +587,6 @@ BOOST_AUTO_TEST_CASE(tcp6_relay_base)
 
         tcp_relay->close();
 
-        BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
         BOOST_TEST_MESSAGE("TCP6 relay base test passed");
     }
     catch (const ricochet::unavailable_proto& e)
@@ -613,17 +603,13 @@ BOOST_AUTO_TEST_CASE(tcp6_relay_base)
 
 BOOST_AUTO_TEST_CASE(udp4_relay_base)
 {
-    auto cp = std::make_shared<std::promise<void>>();
-    ricochet::cleanup_function cleanup = [cp]() mutable { cp->set_value(); };
-
     try
     {
         auto udp_relay = std::make_shared<ricochet::udp_relay>(
             io,
             ricochet::protocol::udp4,
             boost::posix_time::seconds(30),
-            boost::posix_time::seconds(300),
-            cleanup
+            boost::posix_time::seconds(300)
         );
 
         auto proto = udp_relay->get_protocol();
@@ -639,7 +625,6 @@ BOOST_AUTO_TEST_CASE(udp4_relay_base)
 
         udp_relay->close();
 
-        BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
         BOOST_TEST_MESSAGE("UDP4 relay base test passed");
     }
     catch (const ricochet::unavailable_proto& e)
@@ -656,17 +641,13 @@ BOOST_AUTO_TEST_CASE(udp4_relay_base)
 
 BOOST_AUTO_TEST_CASE(udp6_relay_base)
 {
-    auto cp = std::make_shared<std::promise<void>>();
-    ricochet::cleanup_function cleanup = [cp]() mutable { cp->set_value(); };
-
     try
     {
         auto udp_relay = std::make_shared<ricochet::udp_relay>(
             io,
             ricochet::protocol::udp6,
             boost::posix_time::seconds(30),
-            boost::posix_time::seconds(300),
-            cleanup
+            boost::posix_time::seconds(300)
         );
 
         auto proto = udp_relay->get_protocol();
@@ -682,7 +663,6 @@ BOOST_AUTO_TEST_CASE(udp6_relay_base)
 
         udp_relay->close();
 
-        BOOST_CHECK(cp->get_future().wait_for(std::chrono::milliseconds(1000)) == std::future_status::ready);
         BOOST_TEST_MESSAGE("UDP6 relay base test passed");
     }
     catch (const ricochet::unavailable_proto& e)
@@ -699,26 +679,25 @@ BOOST_AUTO_TEST_CASE(udp6_relay_base)
 
 BOOST_AUTO_TEST_CASE(tcp4_client_client_relay)
 {
-    auto cp = std::make_shared<std::promise<void>>();
-    ricochet::cleanup_function cleanup = [cp]() mutable { cp->set_value(); };
-
     try
     {
         auto relay = std::make_shared<ricochet::tcp_relay>(
             io,
             ricochet::protocol::tcp4,
             boost::posix_time::seconds(10),
-            boost::posix_time::seconds(10),
-            cleanup
+            boost::posix_time::seconds(10)
         );
 
         ricochet::endpoint ep = relay->get_endpoint();
         boost::asio::ip::tcp::endpoint mirror(ep.address(), ep.port());
 
+        auto cp = std::make_shared<std::promise<void>>();
+
         BOOST_REQUIRE_NO_THROW(
             relay->start(
                 ricochet::peer(boost::asio::ip::make_address("0.0.0.0"), 0, ricochet::schema::client),
-                ricochet::peer(boost::asio::ip::make_address("0.0.0.0"), 0, ricochet::schema::client)
+                ricochet::peer(boost::asio::ip::make_address("0.0.0.0"), 0, ricochet::schema::client),
+                [cp]() { cp->set_value(); }
             )
         );
 
@@ -754,26 +733,25 @@ BOOST_AUTO_TEST_CASE(tcp4_client_client_relay)
 
 BOOST_AUTO_TEST_CASE(tcp6_client_client_relay)
 {
-    auto cp = std::make_shared<std::promise<void>>();
-    ricochet::cleanup_function cleanup = [cp]() mutable { cp->set_value(); };
-
     try
     {
         auto relay = std::make_shared<ricochet::tcp_relay>(
             io,
             ricochet::protocol::tcp6,
             boost::posix_time::seconds(10),
-            boost::posix_time::seconds(10),
-            cleanup
+            boost::posix_time::seconds(10)
         );
 
         ricochet::endpoint ep = relay->get_endpoint();
         boost::asio::ip::tcp::endpoint mirror(ep.address(), ep.port());
 
+        auto cp = std::make_shared<std::promise<void>>();
+
         BOOST_REQUIRE_NO_THROW(
             relay->start(
                 ricochet::peer(boost::asio::ip::make_address("::"), 0, ricochet::schema::client),
-                ricochet::peer(boost::asio::ip::make_address("::"), 0, ricochet::schema::client)
+                ricochet::peer(boost::asio::ip::make_address("::"), 0, ricochet::schema::client),
+                [cp]() { cp->set_value(); }
             )
         );
 
@@ -809,26 +787,25 @@ BOOST_AUTO_TEST_CASE(tcp6_client_client_relay)
 
 BOOST_AUTO_TEST_CASE(udp4_client_client_relay)
 {
-    auto cp = std::make_shared<std::promise<void>>();
-    ricochet::cleanup_function cleanup = [cp]() mutable { cp->set_value(); };
-
     try
     {
         auto relay = std::make_shared<ricochet::udp_relay>(
             io,
             ricochet::protocol::udp4,
             boost::posix_time::seconds(10),
-            boost::posix_time::seconds(10),
-            cleanup
+            boost::posix_time::seconds(10)
         );
 
         ricochet::endpoint ep = relay->get_endpoint();
         boost::asio::ip::udp::endpoint mirror(ep.address(), ep.port());
 
+        auto cp = std::make_shared<std::promise<void>>();
+
         BOOST_REQUIRE_NO_THROW(
             relay->start(
                 ricochet::peer(boost::asio::ip::make_address("0.0.0.0"), 0, ricochet::schema::client),
-                ricochet::peer(boost::asio::ip::make_address("0.0.0.0"), 0, ricochet::schema::client)
+                ricochet::peer(boost::asio::ip::make_address("0.0.0.0"), 0, ricochet::schema::client),
+                [cp]() { cp->set_value(); }
             )
         );
 
@@ -864,26 +841,25 @@ BOOST_AUTO_TEST_CASE(udp4_client_client_relay)
 
 BOOST_AUTO_TEST_CASE(udp6_client_client_relay)
 {
-    auto cp = std::make_shared<std::promise<void>>();
-    ricochet::cleanup_function cleanup = [cp]() mutable { cp->set_value(); };
-
     try
     {
         auto relay = std::make_shared<ricochet::udp_relay>(
             io,
             ricochet::protocol::udp6,
             boost::posix_time::seconds(10),
-            boost::posix_time::seconds(10),
-            cleanup
+            boost::posix_time::seconds(10)
         );
 
         ricochet::endpoint ep = relay->get_endpoint();
         boost::asio::ip::udp::endpoint mirror(ep.address(), ep.port());
 
+        auto cp = std::make_shared<std::promise<void>>();
+
         BOOST_REQUIRE_NO_THROW(
             relay->start(
                 ricochet::peer(boost::asio::ip::make_address("::"), 0, ricochet::schema::client),
-                ricochet::peer(boost::asio::ip::make_address("::"), 0, ricochet::schema::client)
+                ricochet::peer(boost::asio::ip::make_address("::"), 0, ricochet::schema::client),
+                [cp]() { cp->set_value(); }
             )
         );
 
@@ -919,27 +895,26 @@ BOOST_AUTO_TEST_CASE(udp6_client_client_relay)
 
 BOOST_AUTO_TEST_CASE(tcp4_client_server_relay)
 {
-    auto cp = std::make_shared<std::promise<void>>();
-    ricochet::cleanup_function cleanup = [cp]() mutable { cp->set_value(); };
-
     try
     {
         auto relay = std::make_shared<ricochet::tcp_relay>(
             io,
             ricochet::protocol::tcp4,
             boost::posix_time::seconds(10),
-            boost::posix_time::seconds(10),
-            cleanup
+            boost::posix_time::seconds(10)
         );
 
         ricochet::endpoint ep = relay->get_endpoint();
         boost::asio::ip::tcp::endpoint mirror(ep.address(), ep.port());
         boost::asio::ip::tcp::endpoint local(ricochet::get_outgoing_address(io, true), 3000);
 
+        auto cp = std::make_shared<std::promise<void>>();
+
         BOOST_REQUIRE_NO_THROW(
             relay->start(
                 ricochet::peer(boost::asio::ip::make_address("0.0.0.0"), 0, ricochet::schema::client),
-                ricochet::peer(local.address(), local.port(), ricochet::schema::server)
+                ricochet::peer(local.address(), local.port(), ricochet::schema::server),
+                [cp]() { cp->set_value(); }
             )
         );
 
@@ -975,27 +950,26 @@ BOOST_AUTO_TEST_CASE(tcp4_client_server_relay)
 
 BOOST_AUTO_TEST_CASE(tcp6_client_server_relay)
 {
-    auto cp = std::make_shared<std::promise<void>>();
-    ricochet::cleanup_function cleanup = [cp]() mutable { cp->set_value(); };
-
     try
     {
         auto relay = std::make_shared<ricochet::tcp_relay>(
             io,
             ricochet::protocol::tcp6,
             boost::posix_time::seconds(10),
-            boost::posix_time::seconds(10),
-            cleanup
+            boost::posix_time::seconds(10)
         );
 
         ricochet::endpoint ep = relay->get_endpoint();
         boost::asio::ip::tcp::endpoint mirror(ep.address(), ep.port());
         boost::asio::ip::tcp::endpoint local(ricochet::get_outgoing_address(io, false), 4000);
 
+        auto cp = std::make_shared<std::promise<void>>();
+
         BOOST_REQUIRE_NO_THROW(
             relay->start(
                 ricochet::peer(boost::asio::ip::make_address("::"), 0, ricochet::schema::client),
-                ricochet::peer(local.address(), local.port(), ricochet::schema::server)
+                ricochet::peer(local.address(), local.port(), ricochet::schema::server),
+                [cp]() { cp->set_value(); }
             )
         );
 
@@ -1031,27 +1005,26 @@ BOOST_AUTO_TEST_CASE(tcp6_client_server_relay)
 
 BOOST_AUTO_TEST_CASE(udp4_client_server_relay)
 {
-    auto cp = std::make_shared<std::promise<void>>();
-    ricochet::cleanup_function cleanup = [cp]() mutable { cp->set_value(); };
-
     try
     {
         auto relay = std::make_shared<ricochet::udp_relay>(
             io,
             ricochet::protocol::udp4,
             boost::posix_time::seconds(10),
-            boost::posix_time::seconds(10),
-            cleanup
+            boost::posix_time::seconds(10)
         );
 
         ricochet::endpoint ep = relay->get_endpoint();
         boost::asio::ip::udp::endpoint mirror(ep.address(), ep.port());
         boost::asio::ip::udp::endpoint local(ricochet::get_outgoing_address(io, true), 5000);
 
+        auto cp = std::make_shared<std::promise<void>>();
+
         BOOST_REQUIRE_NO_THROW(
             relay->start(
                 ricochet::peer(boost::asio::ip::make_address("0.0.0.0"), 0, ricochet::schema::client),
-                ricochet::peer(local.address(), local.port(), ricochet::schema::server)
+                ricochet::peer(local.address(), local.port(), ricochet::schema::server),
+                [cp]() { cp->set_value(); }
             )
         );
 
@@ -1090,27 +1063,26 @@ BOOST_AUTO_TEST_CASE(udp4_client_server_relay)
 
 BOOST_AUTO_TEST_CASE(udp6_client_server_relay)
 {
-    auto cp = std::make_shared<std::promise<void>>();
-    ricochet::cleanup_function cleanup = [cp]() mutable { cp->set_value(); };
-
     try
     {
         auto relay = std::make_shared<ricochet::udp_relay>(
             io,
             ricochet::protocol::udp6,
             boost::posix_time::seconds(10),
-            boost::posix_time::seconds(10),
-            cleanup
+            boost::posix_time::seconds(10)
         );
 
         ricochet::endpoint ep = relay->get_endpoint();
         boost::asio::ip::udp::endpoint mirror(ep.address(), ep.port());
         boost::asio::ip::udp::endpoint local(ricochet::get_outgoing_address(io, false), 6000);
 
+        auto cp = std::make_shared<std::promise<void>>();
+
         BOOST_REQUIRE_NO_THROW(
             relay->start(
                 ricochet::peer(boost::asio::ip::make_address("::"), 0, ricochet::schema::client),
-                ricochet::peer(local.address(), local.port(), ricochet::schema::server)
+                ricochet::peer(local.address(), local.port(), ricochet::schema::server),
+                [cp]() { cp->set_value(); }
             )
         );
 
@@ -1149,17 +1121,13 @@ BOOST_AUTO_TEST_CASE(udp6_client_server_relay)
 
 BOOST_AUTO_TEST_CASE(tcp4_server_server_relay)
 {
-    auto cp = std::make_shared<std::promise<void>>();
-    ricochet::cleanup_function cleanup = [cp]() mutable { cp->set_value(); };
-
     try
     {
         auto relay = std::make_shared<ricochet::tcp_relay>(
             io,
             ricochet::protocol::tcp4,
             boost::posix_time::seconds(10),
-            boost::posix_time::seconds(10),
-            cleanup
+            boost::posix_time::seconds(10)
         );
 
         ricochet::endpoint ep = relay->get_endpoint();
@@ -1167,10 +1135,13 @@ BOOST_AUTO_TEST_CASE(tcp4_server_server_relay)
         boost::asio::ip::tcp::endpoint one(ricochet::get_outgoing_address(io, true), 3001);
         boost::asio::ip::tcp::endpoint two(ricochet::get_outgoing_address(io, true), 3002);
 
+        auto cp = std::make_shared<std::promise<void>>();
+
         BOOST_REQUIRE_NO_THROW(
             relay->start(
                 ricochet::peer(one.address(), one.port(), ricochet::schema::server),
-                ricochet::peer(two.address(), two.port(), ricochet::schema::server)
+                ricochet::peer(two.address(), two.port(), ricochet::schema::server),
+                [cp]() { cp->set_value(); }
             )
         );
 
@@ -1206,17 +1177,13 @@ BOOST_AUTO_TEST_CASE(tcp4_server_server_relay)
 
 BOOST_AUTO_TEST_CASE(tcp6_server_server_relay)
 {
-    auto cp = std::make_shared<std::promise<void>>();
-    ricochet::cleanup_function cleanup = [cp]() mutable { cp->set_value(); };
-
     try
     {
         auto relay = std::make_shared<ricochet::tcp_relay>(
             io,
             ricochet::protocol::tcp6,
             boost::posix_time::seconds(10),
-            boost::posix_time::seconds(10),
-            cleanup
+            boost::posix_time::seconds(10)
         );
 
         ricochet::endpoint ep = relay->get_endpoint();
@@ -1224,10 +1191,13 @@ BOOST_AUTO_TEST_CASE(tcp6_server_server_relay)
         boost::asio::ip::tcp::endpoint one(ricochet::get_outgoing_address(io, false), 4001);
         boost::asio::ip::tcp::endpoint two(ricochet::get_outgoing_address(io, false), 4002);
 
+        auto cp = std::make_shared<std::promise<void>>();
+
         BOOST_REQUIRE_NO_THROW(
             relay->start(
                 ricochet::peer(one.address(), one.port(), ricochet::schema::server),
-                ricochet::peer(two.address(), two.port(), ricochet::schema::server)
+                ricochet::peer(two.address(), two.port(), ricochet::schema::server),
+                [cp]() { cp->set_value(); }
             )
         );
 
@@ -1263,17 +1233,13 @@ BOOST_AUTO_TEST_CASE(tcp6_server_server_relay)
 
 BOOST_AUTO_TEST_CASE(udp4_server_server_relay)
 {
-    auto cp = std::make_shared<std::promise<void>>();
-    ricochet::cleanup_function cleanup = [cp]() mutable { cp->set_value(); };
-
     try
     {
         auto relay = std::make_shared<ricochet::udp_relay>(
             io,
             ricochet::protocol::udp4,
             boost::posix_time::seconds(10),
-            boost::posix_time::seconds(10),
-            cleanup
+            boost::posix_time::seconds(10)
         );
 
         ricochet::endpoint ep = relay->get_endpoint();
@@ -1281,10 +1247,13 @@ BOOST_AUTO_TEST_CASE(udp4_server_server_relay)
         boost::asio::ip::udp::endpoint one(ricochet::get_outgoing_address(io, true), 5001);
         boost::asio::ip::udp::endpoint two(ricochet::get_outgoing_address(io, true), 5002);
 
+        auto cp = std::make_shared<std::promise<void>>();
+
         BOOST_REQUIRE_NO_THROW(
             relay->start(
                 ricochet::peer(one.address(), one.port(), ricochet::schema::server),
-                ricochet::peer(two.address(), two.port(), ricochet::schema::server)
+                ricochet::peer(two.address(), two.port(), ricochet::schema::server),
+                [cp]() { cp->set_value(); }
             )
         );
 
@@ -1326,17 +1295,13 @@ BOOST_AUTO_TEST_CASE(udp4_server_server_relay)
 
 BOOST_AUTO_TEST_CASE(udp6_server_server_relay)
 {
-    auto cp = std::make_shared<std::promise<void>>();
-    ricochet::cleanup_function cleanup = [cp]() mutable { cp->set_value(); };
-
     try
     {
         auto relay = std::make_shared<ricochet::udp_relay>(
             io,
             ricochet::protocol::udp6,
             boost::posix_time::seconds(10),
-            boost::posix_time::seconds(10),
-            cleanup
+            boost::posix_time::seconds(10)
         );
 
         ricochet::endpoint ep = relay->get_endpoint();
@@ -1344,10 +1309,13 @@ BOOST_AUTO_TEST_CASE(udp6_server_server_relay)
         boost::asio::ip::udp::endpoint one(ricochet::get_outgoing_address(io, false), 6001);
         boost::asio::ip::udp::endpoint two(ricochet::get_outgoing_address(io, false), 6002);
 
+        auto cp = std::make_shared<std::promise<void>>();
+
         BOOST_REQUIRE_NO_THROW(
             relay->start(
                 ricochet::peer(one.address(), one.port(), ricochet::schema::server),
-                ricochet::peer(two.address(), two.port(), ricochet::schema::server)
+                ricochet::peer(two.address(), two.port(), ricochet::schema::server),
+                [cp]() { cp->set_value(); }
             )
         );
 
