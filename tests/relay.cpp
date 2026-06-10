@@ -13,8 +13,11 @@ struct relay_test_fixture
     boost::asio::io_context io;
     boost::asio::thread_pool pool;
     boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work;
+    std::shared_ptr<ricochet::heap> heap;
 
-    relay_test_fixture() : work(boost::asio::make_work_guard(io))
+    relay_test_fixture() 
+        : work(boost::asio::make_work_guard(io))
+        , heap(std::make_shared<ricochet::heap>(7412, 10))
     {
         for (size_t i = 0; i < 4; ++i)
         {
@@ -533,7 +536,7 @@ BOOST_AUTO_TEST_CASE(tcp4_relay_base)
     {
         auto tcp_relay = std::make_shared<ricochet::tcp_relay>(
             io,
-            ricochet::protocol::tcp4,
+            heap->make_tcp_relay(io, true),
             boost::posix_time::seconds(30),
             boost::posix_time::seconds(300)
         );
@@ -570,7 +573,7 @@ BOOST_AUTO_TEST_CASE(tcp6_relay_base)
     {
         auto tcp_relay = std::make_shared<ricochet::tcp_relay>(
             io,
-            ricochet::protocol::tcp6,
+            heap->make_tcp_relay(io, false),
             boost::posix_time::seconds(30),
             boost::posix_time::seconds(300)
         );
@@ -607,7 +610,7 @@ BOOST_AUTO_TEST_CASE(udp4_relay_base)
     {
         auto udp_relay = std::make_shared<ricochet::udp_relay>(
             io,
-            ricochet::protocol::udp4,
+            heap->make_udp_relay(io, true),
             boost::posix_time::seconds(30),
             boost::posix_time::seconds(300)
         );
@@ -645,7 +648,7 @@ BOOST_AUTO_TEST_CASE(udp6_relay_base)
     {
         auto udp_relay = std::make_shared<ricochet::udp_relay>(
             io,
-            ricochet::protocol::udp6,
+            heap->make_udp_relay(io, false),
             boost::posix_time::seconds(30),
             boost::posix_time::seconds(300)
         );
@@ -683,7 +686,7 @@ BOOST_AUTO_TEST_CASE(tcp4_client_client_relay)
     {
         auto relay = std::make_shared<ricochet::tcp_relay>(
             io,
-            ricochet::protocol::tcp4,
+            heap->make_tcp_relay(io, true),
             boost::posix_time::seconds(10),
             boost::posix_time::seconds(10)
         );
@@ -737,7 +740,7 @@ BOOST_AUTO_TEST_CASE(tcp6_client_client_relay)
     {
         auto relay = std::make_shared<ricochet::tcp_relay>(
             io,
-            ricochet::protocol::tcp6,
+            heap->make_tcp_relay(io, false),
             boost::posix_time::seconds(10),
             boost::posix_time::seconds(10)
         );
@@ -791,7 +794,7 @@ BOOST_AUTO_TEST_CASE(udp4_client_client_relay)
     {
         auto relay = std::make_shared<ricochet::udp_relay>(
             io,
-            ricochet::protocol::udp4,
+            heap->make_udp_relay(io, true),
             boost::posix_time::seconds(10),
             boost::posix_time::seconds(10)
         );
@@ -845,7 +848,7 @@ BOOST_AUTO_TEST_CASE(udp6_client_client_relay)
     {
         auto relay = std::make_shared<ricochet::udp_relay>(
             io,
-            ricochet::protocol::udp6,
+            heap->make_udp_relay(io, false),
             boost::posix_time::seconds(10),
             boost::posix_time::seconds(10)
         );
@@ -899,7 +902,7 @@ BOOST_AUTO_TEST_CASE(tcp4_client_server_relay)
     {
         auto relay = std::make_shared<ricochet::tcp_relay>(
             io,
-            ricochet::protocol::tcp4,
+            heap->make_tcp_relay(io, true),
             boost::posix_time::seconds(10),
             boost::posix_time::seconds(10)
         );
@@ -954,7 +957,7 @@ BOOST_AUTO_TEST_CASE(tcp6_client_server_relay)
     {
         auto relay = std::make_shared<ricochet::tcp_relay>(
             io,
-            ricochet::protocol::tcp6,
+            heap->make_tcp_relay(io, false),
             boost::posix_time::seconds(10),
             boost::posix_time::seconds(10)
         );
@@ -1009,7 +1012,7 @@ BOOST_AUTO_TEST_CASE(udp4_client_server_relay)
     {
         auto relay = std::make_shared<ricochet::udp_relay>(
             io,
-            ricochet::protocol::udp4,
+            heap->make_udp_relay(io, true),
             boost::posix_time::seconds(10),
             boost::posix_time::seconds(10)
         );
@@ -1067,7 +1070,7 @@ BOOST_AUTO_TEST_CASE(udp6_client_server_relay)
     {
         auto relay = std::make_shared<ricochet::udp_relay>(
             io,
-            ricochet::protocol::udp6,
+            heap->make_udp_relay(io, false),
             boost::posix_time::seconds(10),
             boost::posix_time::seconds(10)
         );
@@ -1125,7 +1128,7 @@ BOOST_AUTO_TEST_CASE(tcp4_server_server_relay)
     {
         auto relay = std::make_shared<ricochet::tcp_relay>(
             io,
-            ricochet::protocol::tcp4,
+            heap->make_tcp_relay(io, true),
             boost::posix_time::seconds(10),
             boost::posix_time::seconds(10)
         );
@@ -1181,7 +1184,7 @@ BOOST_AUTO_TEST_CASE(tcp6_server_server_relay)
     {
         auto relay = std::make_shared<ricochet::tcp_relay>(
             io,
-            ricochet::protocol::tcp6,
+            heap->make_tcp_relay(io, false),
             boost::posix_time::seconds(10),
             boost::posix_time::seconds(10)
         );
@@ -1237,7 +1240,7 @@ BOOST_AUTO_TEST_CASE(udp4_server_server_relay)
     {
         auto relay = std::make_shared<ricochet::udp_relay>(
             io,
-            ricochet::protocol::udp4,
+            heap->make_udp_relay(io, true),
             boost::posix_time::seconds(10),
             boost::posix_time::seconds(10)
         );
@@ -1299,7 +1302,7 @@ BOOST_AUTO_TEST_CASE(udp6_server_server_relay)
     {
         auto relay = std::make_shared<ricochet::udp_relay>(
             io,
-            ricochet::protocol::udp6,
+            heap->make_udp_relay(io, false),
             boost::posix_time::seconds(10),
             boost::posix_time::seconds(10)
         );

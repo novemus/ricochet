@@ -12,6 +12,19 @@ bool is_ip6_available(boost::asio::io_context& io);
 boost::asio::ip::address get_outgoing_address(boost::asio::io_context& io, bool ip4);
 boost::asio::ip::address get_outgoing_address(boost::asio::io_context& io, const boost::asio::ip::address& address);
 
+class heap
+{
+    std::vector<uint16_t> m_heap;
+    size_t m_next = 0;
+    std::mutex m_mutex;
+
+public:
+
+    heap(uint16_t base, uint16_t span);
+    boost::asio::ip::tcp::acceptor make_tcp_relay(boost::asio::io_context& io, bool ip4);
+    boost::asio::ip::udp::socket make_udp_relay(boost::asio::io_context& io, bool ip4);
+};
+
 using final_callback = std::function<void()>;
 
 struct relay
@@ -40,7 +53,7 @@ class tcp_relay : public relay, public std::enable_shared_from_this<tcp_relay>
 
 public:
 
-    tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds wait, boost::posix_time::seconds idle);
+    tcp_relay(boost::asio::io_context& io, boost::asio::ip::tcp::acceptor server, boost::posix_time::seconds wait, boost::posix_time::seconds idle);
     ~tcp_relay() override;
     protocol get_protocol() const override;
     endpoint get_endpoint() const override;
@@ -72,7 +85,7 @@ class udp_relay : public relay, public std::enable_shared_from_this<udp_relay>
 
 public:
 
-    udp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds wait, boost::posix_time::seconds idle);
+    udp_relay(boost::asio::io_context& io, boost::asio::ip::udp::socket socket, boost::posix_time::seconds wait, boost::posix_time::seconds idle);
     ~udp_relay() override;
     protocol get_protocol() const override;
     endpoint get_endpoint() const override;

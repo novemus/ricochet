@@ -5,6 +5,8 @@
 #include <memory>
 #include <chrono>
 #include <cstdlib>
+#include <algorithm>
+#include <random>
 #include "proto.h"
 #include "relay.h"
 #include "logging.h"
@@ -82,10 +84,76 @@ boost::asio::ip::address get_outgoing_address(boost::asio::io_context& io, const
     return address.is_unspecified() ? get_outgoing_address(io, address.is_v4()) : address;
 }
 
-tcp_relay::tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds wait, boost::posix_time::seconds idle)
+heap::heap(uint16_t base, uint16_t span)
+{
+    m_heap.resize(span);
+
+    for (size_t i = 0; i < span; ++i)
+        m_heap[i] = i + base;
+
+    std::random_device rd;
+    std::shuffle(m_heap.begin(), m_heap.end(), std::mt19937(rd()));
+}
+
+boost::asio::ip::tcp::acceptor heap::make_tcp_relay(boost::asio::io_context& io, bool ip4)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    boost::system::error_code ec;
+    for (size_t i = 0; i < m_heap.size(); ++i)
+    {
+        if (m_next == m_heap.size())
+            m_next = 0;
+
+        boost::asio::ip::tcp::endpoint ep(get_outgoing_address(io, ip4), m_heap[m_next++]);
+        boost::asio::ip::tcp::socket socket(io);
+        if (!socket.open(ep.protocol(), ec) && !socket.bind(ep, ec) && !socket.close(ec))
+        {
+            boost::asio::ip::tcp::acceptor relay(io);
+            relay.open(ep.protocol());
+            relay.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
+#if defined(__APPLE__) || defined(__linux__)
+            int optval = 1;
+            ::setsockopt(relay.native_handle(), SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+#endif
+            relay.bind(ep);
+            relay.listen();
+            return std::move(relay);
+        }
+    }
+
+    throw std::runtime_error("No free port");
+}
+
+boost::asio::ip::udp::socket heap::make_udp_relay(boost::asio::io_context& io, bool ip4)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    boost::system::error_code ec;
+    for (size_t i = 0; i < m_heap.size(); ++i)
+    {
+        if (m_next == m_heap.size())
+            m_next = 0;
+
+        boost::asio::ip::udp::endpoint ep(get_outgoing_address(io, ip4), m_heap[m_next++]);
+        boost::asio::ip::udp::socket socket(io);
+        if (!socket.open(ep.protocol(), ec) && !socket.bind(ep, ec) && !socket.close(ec))
+        {
+            boost::asio::ip::udp::socket relay(io);
+            relay.open(ep.protocol());
+            relay.set_option(boost::asio::socket_base::reuse_address(true));
+            relay.bind(ep);
+            return std::move(relay);
+        }
+    }
+
+    throw std::runtime_error("No free port");
+}
+
+tcp_relay::tcp_relay(boost::asio::io_context& io, boost::asio::ip::tcp::acceptor server, boost::posix_time::seconds wait, boost::posix_time::seconds idle)
     : m_io(io)
     , m_strand(io)
-    , m_server(io)
+    , m_server(std::move(server))
     , m_one(io)
     , m_two(io)
     , m_timer(io)
@@ -95,17 +163,6 @@ tcp_relay::tcp_relay(boost::asio::io_context& io, protocol proto, boost::posix_t
     , m_timestamp(std::chrono::steady_clock::now() - std::chrono::seconds(5))
     , m_reconnects(0)
 {
-    auto protocol = proto == protocol::tcp6 ? boost::asio::ip::tcp::v6() : boost::asio::ip::tcp::v4();
-
-    m_server.open(protocol);
-    m_server.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
-#if defined(__APPLE__) || defined(__linux__)
-    int optval = 1;
-    ::setsockopt(m_server.native_handle(), SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
-#endif
-    m_server.bind(boost::asio::ip::tcp::endpoint(protocol, 0));
-    m_server.listen();
-
     _inf_ << "TCP relay " << this << " created on " << m_server.local_endpoint();
 }
 
@@ -370,18 +427,15 @@ void tcp_relay::break_relay()
     }
 }
 
-udp_relay::udp_relay(boost::asio::io_context& io, protocol proto, boost::posix_time::seconds wait, boost::posix_time::seconds idle)
+udp_relay::udp_relay(boost::asio::io_context& io, boost::asio::ip::udp::socket socket, boost::posix_time::seconds wait, boost::posix_time::seconds idle)
     : m_io(io)
     , m_strand(io)
-    , m_socket(io, proto == protocol::udp6 ? boost::asio::ip::udp::v6() : boost::asio::ip::udp::v4())
+    , m_socket(std::move(socket))
     , m_timer(io)
     , m_wait(wait)
     , m_idle(idle)
     , m_timestamp(std::chrono::steady_clock::now() - std::chrono::seconds(5))
 {
-    m_socket.set_option(boost::asio::socket_base::reuse_address(true));
-    m_socket.bind(boost::asio::ip::udp::endpoint(proto == protocol::udp6 ? boost::asio::ip::udp::v6() : boost::asio::ip::udp::v4(), 0));
-
     _inf_ << "UDP relay " << this << " created on " << m_socket.local_endpoint();
 }
 

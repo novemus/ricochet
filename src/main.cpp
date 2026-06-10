@@ -19,15 +19,16 @@ int main(int argc, char* argv[])
         desc.add_options()
             ("help", "show help message")
             ("address", po::value<std::string>()->default_value("0.0.0.0"), "listen address")
-            ("port", po::value<uint16_t>()->default_value(443), "listen port")
+            ("port", po::value<uint16_t>()->default_value(7411), "listen port")
+            ("pool", po::value<uint16_t>()->default_value(100), "relay port pool (next to the listen port)")
             ("cert", po::value<std::filesystem::path>()->default_value("server.pem"), "SSL certificate file")
             ("key", po::value<std::filesystem::path>()->default_value("server.key"), "SSL private key file")
             ("ca", po::value<std::filesystem::path>()->default_value(""), "CA certificate file")
             ("repo", po::value<std::filesystem::path>()->default_value(std::filesystem::current_path()), "path to client SSL certificate repository")
             ("wait", po::value<int>()->default_value(30), "wait for relay connection (seconds)")
             ("idle", po::value<int>()->default_value(180), "idle relay timeout (seconds)")
-            ("quota", po::value<size_t>()->default_value(10), "maximum relays per client")
-            ("limit", po::value<size_t>()->default_value(100), "maximum relays count")
+            ("quota", po::value<uint32_t>()->default_value(10), "maximum relays per client")
+            ("limit", po::value<uint32_t>()->default_value(100), "maximum relays count")
             ("report", po::value<std::string>()->default_value("info"), "report level (trace, debug, info, warning, error, fatal)")
             ("journal", po::value<std::filesystem::path>(), "journal file (optional)");
 
@@ -61,13 +62,13 @@ int main(int argc, char* argv[])
             return 1;
         }
 
-        if (vm["quota"].as<size_t>() == 0)
+        if (vm["quota"].as<uint32_t>() == 0)
         {
             _ftl_ << "Client limit must be positive";
             return 1;
         }
 
-        if (vm["limit"].as<size_t>() == 0)
+        if (vm["limit"].as<uint32_t>() == 0)
         {
             _ftl_ << "Total limit must be positive";
             return 1;
@@ -78,6 +79,8 @@ int main(int argc, char* argv[])
             boost::asio::ip::make_address(vm["address"].as<std::string>()),
             vm["port"].as<uint16_t>()
         );
+        config.relay_port_base = vm["port"].as<uint16_t>() + 1;
+        config.relay_port_span = vm["pool"].as<uint16_t>();
         config.server_cert = vm["cert"].as<std::filesystem::path>();
         config.server_key = vm["key"].as<std::filesystem::path>();
         config.ca_cert = vm["ca"].as<std::filesystem::path>();
@@ -93,6 +96,8 @@ int main(int argc, char* argv[])
         unsigned int thread_count = std::max(4u, std::thread::hardware_concurrency());
 
         _inf_ << "Starting Ricochet relay server on " << config.server_endpoint.address() << ":" << config.server_endpoint.port();
+        _inf_ << "Relay port base: " << config.relay_port_base;
+        _inf_ << "Relay port span: " << config.relay_port_span;
         _inf_ << "SSL certificate: " << config.server_cert;
         _inf_ << "SSL private key: " << config.server_key;
         _inf_ << "CA certificate: " << config.ca_cert;

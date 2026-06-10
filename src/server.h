@@ -9,6 +9,7 @@
 #include <mutex>
 #include "repo.h"
 #include "session.h"
+#include "relay.h"
 
 namespace ricochet {
 
@@ -21,8 +22,10 @@ struct config
     std::filesystem::path client_repo;
     boost::posix_time::seconds wait_timeout;
     boost::posix_time::seconds idle_timeout;
-    size_t client_relay_limit;
-    size_t total_relay_limit;
+    uint16_t relay_port_base;
+    uint16_t relay_port_span;
+    uint32_t client_relay_limit;
+    uint32_t total_relay_limit;
 
     config()
         : server_endpoint()
@@ -32,6 +35,8 @@ struct config
         , client_repo("")
         , wait_timeout(boost::posix_time::seconds(30))
         , idle_timeout(boost::posix_time::seconds(180))
+        , relay_port_base(7411)
+        , relay_port_span(100)
         , client_relay_limit(10)
         , total_relay_limit(100)
     {}
@@ -45,6 +50,7 @@ class server : public std::enable_shared_from_this<server>
     std::shared_ptr<boost::asio::ssl::context> m_ssl;
     boost::asio::ip::tcp::acceptor m_server;
     std::map<std::string, std::set<std::shared_ptr<session>>> m_relays;
+    std::shared_ptr<heap> m_heap;
     std::mutex m_mutex;
 
 public:

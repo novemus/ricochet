@@ -17,6 +17,7 @@ server::server(boost::asio::io_context& io, const config& conf)
     , m_io(io)
     , m_ssl(std::make_shared<boost::asio::ssl::context>(boost::asio::ssl::context::sslv23_server))
     , m_server(io)
+    , m_heap(std::make_shared<heap>(m_config.relay_port_base, m_config.relay_port_span))
 {
     m_ssl->set_options(boost::asio::ssl::context::default_workarounds | boost::asio::ssl::context::single_dh_use);
 
@@ -104,7 +105,7 @@ void server::accept()
 
                         std::lock_guard<std::mutex> lock(m_mutex);
 
-                        auto relay = std::make_shared<session>(m_io, m_ssl, std::move(*socket), m_config.wait_timeout, m_config.idle_timeout);
+                        auto relay = std::make_shared<session>(m_io, m_ssl, std::move(*socket), m_heap, m_config.wait_timeout, m_config.idle_timeout);
                         bool reject = !check_limits(hash);
 
                         m_relays[hash].insert(relay);
@@ -149,8 +150,8 @@ void server::accept()
 
 bool server::check_limits(const std::string& client) const
 {
-    size_t client_sessions = 0;
-    size_t total_sessions = 0;
+    uint32_t client_sessions = 0;
+    uint32_t total_sessions = 0;
 
     for (auto& [hash, sessions] : m_relays)
     {
