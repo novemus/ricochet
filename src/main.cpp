@@ -1,3 +1,13 @@
+/*
+ * Copyright (c) 2026 Novemus Band. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ */
+
 #include <boost/asio.hpp>
 #include <boost/program_options.hpp>
 #include <boost/program_options/options_description.hpp>
@@ -87,8 +97,8 @@ int main(int argc, char* argv[])
         config.client_repo = vm["repo"].as<std::filesystem::path>();
         config.wait_timeout = boost::posix_time::seconds(vm["wait"].as<int>());
         config.idle_timeout = boost::posix_time::seconds(vm["idle"].as<int>());
-        config.client_relay_limit = vm["quota"].as<size_t>();
-        config.total_relay_limit = vm["limit"].as<size_t>();
+        config.client_relay_limit = vm["quota"].as<uint32_t>();
+        config.total_relay_limit = vm["limit"].as<uint32_t>();
 
         boost::asio::io_context io;
         auto server = std::make_shared<ricochet::server>(io, config);
