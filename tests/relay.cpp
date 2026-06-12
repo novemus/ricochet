@@ -12,6 +12,7 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/test/unit_test.hpp>
 #include <boost/asio/executor_work_guard.hpp>
+#include <boost/scope_exit.hpp>
 #include <memory>
 #include <vector>
 #include <chrono>
@@ -40,6 +41,7 @@ struct relay_test_fixture
 
     ~relay_test_fixture()
     {
+        work.reset();
         io.stop();
         pool.join();
     }
@@ -185,36 +187,54 @@ struct udp_helper
     static void swap(boost::asio::ip::udp::socket& left, boost::asio::ip::udp::socket& right, const std::vector<uint8_t>& data)
     {
         boost::asio::deadline_timer resend_timer(left.get_executor());
-        resend_timer.expires_from_now(boost::posix_time::milliseconds(100));
-        resend_timer.async_wait([&](const boost::system::error_code& ec)
+        auto send_future = boost::asio::spawn(right.get_executor(), [&](boost::asio::yield_context yield)
         {
+            boost::system::error_code ec;
+
+            left.async_send(boost::asio::buffer(data), yield[ec]);
+            right.async_send(boost::asio::buffer(data), yield[ec]);
+
+            resend_timer.expires_from_now(boost::posix_time::milliseconds(100));
+            resend_timer.async_wait(yield[ec]);
+
             if (ec.value() != boost::asio::error::operation_aborted)
             {
-                left.send(boost::asio::buffer(data));
-                right.send(boost::asio::buffer(data));
+                left.async_send(boost::asio::buffer(data), yield[ec]);
+                right.async_send(boost::asio::buffer(data), yield[ec]);
             }
-        });
+        },
+        boost::asio::use_future);
 
-        boost::asio::deadline_timer receive_timer(right.get_executor());
-        receive_timer.expires_from_now(boost::posix_time::milliseconds(500));
-        receive_timer.async_wait([&](const boost::system::error_code& ec)
+        boost::asio::deadline_timer close_timer(left.get_executor());
+        auto close_future = boost::asio::spawn(right.get_executor(), [&](boost::asio::yield_context yield)
         {
+            boost::system::error_code ec;
+            close_timer.expires_from_now(boost::posix_time::milliseconds(500));
+            close_timer.async_wait(yield[ec]);
+
             if (ec.value() != boost::asio::error::operation_aborted)
             {
-                left.close();
-                right.close();
+                left.close(ec);
+                right.close(ec);
             }
-        });
+        },
+        boost::asio::use_future);
 
-        left.send(boost::asio::buffer(data));
-        right.send(boost::asio::buffer(data));
+        BOOST_SCOPE_EXIT(&resend_timer, &close_timer, &send_future, &close_future)
+        {
+            boost::system::error_code ec;
+            resend_timer.cancel(ec);
+            close_timer.cancel(ec);
+            send_future.wait();
+            close_future.wait();
+        } BOOST_SCOPE_EXIT_END
 
         std::vector<uint8_t> recv(data.size());
         boost::asio::spawn(right.get_executor(), [&](boost::asio::yield_context yield)
         {
             auto read = right.async_receive(boost::asio::buffer(recv), yield);
             recv.resize(read);
-        }, 
+        },
         boost::asio::use_future).get();
 
         if (recv != data)
@@ -226,37 +246,52 @@ struct udp_helper
             recv.resize(read);
         }, 
         boost::asio::use_future).get();
-    
+
         if (recv != data)
             throw boost::system::system_error(boost::asio::error::invalid_argument);
-
-        resend_timer.cancel();
-        receive_timer.cancel();
     }
 
     static void push(boost::asio::ip::udp::socket& from, boost::asio::ip::udp::socket& to, const std::vector<uint8_t>& data)
     {
         boost::asio::deadline_timer resend_timer(from.get_executor());
-        resend_timer.expires_from_now(boost::posix_time::milliseconds(100));
-        resend_timer.async_wait([&](const boost::system::error_code& ec)
+        auto send_future = boost::asio::spawn(from.get_executor(), [&](boost::asio::yield_context yield)
         {
+            boost::system::error_code ec;
+
+            from.async_send(boost::asio::buffer(data), yield[ec]);
+
+            resend_timer.expires_from_now(boost::posix_time::milliseconds(100));
+            resend_timer.async_wait(yield[ec]);
+
             if (ec.value() != boost::asio::error::operation_aborted)
             {
-                from.send(boost::asio::buffer(data));
+                from.async_send(boost::asio::buffer(data), yield[ec]);
             }
-        });
+        },
+        boost::asio::use_future);
 
-        boost::asio::deadline_timer receive_timer(to.get_executor());
-        receive_timer.expires_from_now(boost::posix_time::milliseconds(500));
-        receive_timer.async_wait([&](const boost::system::error_code& ec)
+        boost::asio::deadline_timer close_timer(to.get_executor());
+        auto close_future = boost::asio::spawn(to.get_executor(), [&](boost::asio::yield_context yield)
         {
+            boost::system::error_code ec;
+            close_timer.expires_from_now(boost::posix_time::milliseconds(500));
+            close_timer.async_wait(yield[ec]);
+
             if (ec.value() != boost::asio::error::operation_aborted)
             {
-                to.close();
+                to.close(ec);
             }
-        });
+        },
+        boost::asio::use_future);
 
-        from.send(boost::asio::buffer(data));
+        BOOST_SCOPE_EXIT(&resend_timer, &close_timer, &send_future, &close_future)
+        {
+            boost::system::error_code ec;
+            resend_timer.cancel(ec);
+            close_timer.cancel(ec);
+            send_future.wait();
+            close_future.wait();
+        } BOOST_SCOPE_EXIT_END
 
         std::vector<uint8_t> recv(data.size());
         do
@@ -265,13 +300,10 @@ struct udp_helper
             {
                 auto read = to.async_receive(boost::asio::buffer(recv), yield);
                 recv.resize(read);
-            }, 
+            },
             boost::asio::use_future).get();
-        } 
+        }
         while (recv != data);
-
-        resend_timer.cancel();
-        receive_timer.cancel();
     }
 };
 

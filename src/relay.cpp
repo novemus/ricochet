@@ -392,7 +392,7 @@ void tcp_relay::transmit_data(boost::asio::ip::tcp::socket& from, boost::asio::i
                 m_timestamp = std::chrono::steady_clock::now();
                 
                 boost::asio::async_write(to, boost::asio::buffer(buffer.get(), size),
-                    [this, weak, &from, &to](const boost::system::error_code& ec, std::size_t)
+                    m_strand.wrap([this, weak = weak_from_this(), &from, &to](const boost::system::error_code& ec, std::size_t)
                     {
                         auto self = weak.lock();
                         if (!self)
@@ -408,7 +408,7 @@ void tcp_relay::transmit_data(boost::asio::ip::tcp::socket& from, boost::asio::i
                             _dbg_ << "TCP relay " << this << " failed to write data: " << ec.message();
                             break_relay();
                         }
-                    });
+                    }));
             }
             else
             {
