@@ -43,21 +43,28 @@ client::~client()
     if (!m_socket || !m_socket->lowest_layer().is_open())
         return;
 
-    boost::system::error_code ec;
-    m_socket->lowest_layer().shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
-    m_socket->lowest_layer().close(ec);
+    boost::asio::spawn(m_socket->get_executor(), [socket = std::move(m_socket)](boost::asio::yield_context yield)
+    {
+        execute(yield, [yield, socket]()
+        {
+            boost::system::error_code ec;
+            socket->async_shutdown(yield[ec]);
+            socket->lowest_layer().shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
+            socket->lowest_layer().close(ec);
+        }, socket, 2000);
+    }, boost::asio::detached);
 }
 
 void client::connect(boost::asio::yield_context yield)
 {
-    m_socket = std::make_unique<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>(yield.get_executor(), m_ssl);
+    m_socket = std::make_shared<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>(yield.get_executor(), m_ssl);
 
     execute(yield, [this, yield]()
     {
         m_socket->lowest_layer().open(m_server.protocol());
         m_socket->lowest_layer().async_connect(m_server, yield);
         m_socket->async_handshake(boost::asio::ssl::stream_base::client, yield);
-    });
+    }, m_socket);
 }
 
 void client::shutdown(boost::asio::yield_context yield)
@@ -72,8 +79,7 @@ void client::shutdown(boost::asio::yield_context yield)
         m_socket->lowest_layer().shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
         m_socket->lowest_layer().close(ec);
         m_socket.reset();
-    },
-    2000);
+    }, m_socket, 2000);
 }
 
 void client::write_query(boost::asio::yield_context yield, const query& req)
@@ -87,7 +93,7 @@ void client::write_query(boost::asio::yield_context yield, const query& req)
 
         if (size != req.size())
             throw boost::system::system_error(boost::asio::error::no_recovery, "can't write query message");
-    });
+    }, m_socket);
 }
 
 void client::read_reply(boost::asio::yield_context yield, reply& res)
@@ -119,10 +125,10 @@ void client::read_reply(boost::asio::yield_context yield, reply& res)
                 shutdown(yield);
             throw;
         }
-    });
+    }, m_socket);
 }
 
-void client::execute(boost::asio::yield_context yield, const std::function<void()>& function, int timeout)
+void client::execute(boost::asio::yield_context yield, const std::function<void()>& function, socket_ptr socket, int timeout)
 {
     boost::asio::deadline_timer timer(yield.get_executor());
 
@@ -132,10 +138,10 @@ void client::execute(boost::asio::yield_context yield, const std::function<void(
         if (ec == boost::asio::error::operation_aborted)
             return;
 
-        if (m_socket && m_socket->lowest_layer().is_open())
+        if (socket && socket->lowest_layer().is_open())
         {
             boost::system::error_code err;
-            m_socket->lowest_layer().cancel(err);
+            socket->lowest_layer().cancel(err);
         }
     });
 

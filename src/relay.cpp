@@ -120,15 +120,18 @@ boost::asio::ip::tcp::acceptor heap::make_tcp_relay(boost::asio::io_context& io,
         if (!socket.open(ep.protocol(), ec) && !socket.bind(ep, ec) && !socket.close(ec))
         {
             boost::asio::ip::tcp::acceptor relay(io);
-            relay.open(ep.protocol());
-            relay.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
+            if (!relay.open(ep.protocol(), ec) && !relay.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true), ec))
+            {
 #if defined(__APPLE__) || defined(__linux__)
-            int optval = 1;
-            ::setsockopt(relay.native_handle(), SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+                int optval = 1;
+                ::setsockopt(relay.native_handle(), SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
 #endif
-            relay.bind(ep);
-            relay.listen();
-            return std::move(relay);
+                if (!relay.bind(ep, ec))
+                {
+                    relay.listen();
+                    return std::move(relay);
+                }
+            }
         }
     }
 
@@ -150,10 +153,8 @@ boost::asio::ip::udp::socket heap::make_udp_relay(boost::asio::io_context& io, b
         if (!socket.open(ep.protocol(), ec) && !socket.bind(ep, ec) && !socket.close(ec))
         {
             boost::asio::ip::udp::socket relay(io);
-            relay.open(ep.protocol());
-            relay.set_option(boost::asio::socket_base::reuse_address(true));
-            relay.bind(ep);
-            return std::move(relay);
+            if (!relay.open(ep.protocol(), ec) && !relay.set_option(boost::asio::socket_base::reuse_address(true), ec) && !relay.bind(ep, ec))
+                return std::move(relay);
         }
     }
 

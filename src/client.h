@@ -20,6 +20,8 @@ namespace ricochet {
 
 class client
 {
+    using socket_ptr = std::shared_ptr<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>;
+
 public:
     client(const boost::asio::ip::tcp::endpoint& server,
            const std::filesystem::path& cert,
@@ -34,11 +36,11 @@ public:
 
 private:
 
-    void execute(boost::asio::yield_context yield, const std::function<void()>& function, int timeout = 10000);
+    static void execute(boost::asio::yield_context yield, const std::function<void()>& function, socket_ptr socket, int timeout = 10000);
 
     boost::asio::ssl::context m_ssl;
     boost::asio::ip::tcp::endpoint m_server;
-    std::unique_ptr<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>> m_socket;
+    socket_ptr m_socket;
 };
 
 } // namespace ricochet
