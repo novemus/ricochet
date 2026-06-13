@@ -88,7 +88,7 @@ BOOST_AUTO_TEST_CASE(udp4_relay_session)
 
             BOOST_REQUIRE_NO_THROW(client->write_query(yield, ricochet::query::make_connect_query(red, blue)));
 
-            ricochet::reply reply(4096);
+            reply.resize(4096);
             BOOST_REQUIRE_NO_THROW(client->read_reply(yield, reply));
             BOOST_CHECK_EQUAL(reply.type(), ricochet::reply::kind::confirm);
         }
@@ -138,7 +138,7 @@ BOOST_AUTO_TEST_CASE(udp6_relay_session)
 
             BOOST_REQUIRE_NO_THROW(client->write_query(yield, ricochet::query::make_connect_query(red, blue)));
 
-            ricochet::reply reply(4096);
+            reply.resize(4096);
             BOOST_REQUIRE_NO_THROW(client->read_reply(yield, reply));
             BOOST_CHECK_EQUAL(reply.type(), ricochet::reply::kind::confirm);
         }
@@ -197,7 +197,7 @@ BOOST_AUTO_TEST_CASE(multiple_client_sessions)
 
                 BOOST_REQUIRE_NO_THROW(client->write_query(yield, ricochet::query::make_connect_query(red, blue)));
 
-                ricochet::reply reply(4096);
+                reply.resize(4096);
                 BOOST_REQUIRE_NO_THROW(client->read_reply(yield, reply));
                 BOOST_CHECK_EQUAL(reply.type(), ricochet::reply::kind::confirm);
             }
@@ -348,7 +348,7 @@ BOOST_AUTO_TEST_CASE(client_malformed_message)
 
             BOOST_REQUIRE_NO_THROW(client->write_query(yield, ricochet::query::make_provide_query(ricochet::protocol::udp4)));
 
-            ricochet::reply reply(4096);
+            reply.resize(4096);
             BOOST_REQUIRE_NO_THROW(client->read_reply(yield, reply));
 
             BOOST_CHECK_EQUAL(reply.type(), ricochet::reply::kind::mistake);
@@ -401,7 +401,7 @@ BOOST_AUTO_TEST_CASE(undefined_server_port)
 
             BOOST_REQUIRE_NO_THROW(client->write_query(yield, ricochet::query::make_connect_query(red, blue)));
 
-            ricochet::reply reply(4096);
+            reply.resize(4096);
             BOOST_REQUIRE_NO_THROW(client->read_reply(yield, reply));
             BOOST_CHECK_EQUAL(reply.type(), ricochet::reply::kind::mistake);
             auto failure = std::get<ricochet::failure>(reply.payload());
@@ -451,7 +451,7 @@ BOOST_AUTO_TEST_CASE(undefined_server_address)
 
             BOOST_REQUIRE_NO_THROW(client->write_query(yield, ricochet::query::make_connect_query(red, blue)));
 
-            ricochet::reply reply(4096);
+            reply.resize(4096);
             BOOST_REQUIRE_NO_THROW(client->read_reply(yield, reply));
             BOOST_CHECK_EQUAL(reply.type(), ricochet::reply::kind::mistake);
             auto failure = std::get<ricochet::failure>(reply.payload());
@@ -501,7 +501,7 @@ BOOST_AUTO_TEST_CASE(wrong_connect_query)
 
             BOOST_REQUIRE_NO_THROW(client->write_query(yield, ricochet::query::make_connect_query(red, blue)));
 
-            ricochet::reply reply(4096);
+            reply.resize(4096);
             BOOST_REQUIRE_NO_THROW(client->read_reply(yield, reply));
             BOOST_CHECK_EQUAL(reply.type(), ricochet::reply::kind::mistake);
             auto failure = std::get<ricochet::failure>(reply.payload());
@@ -542,7 +542,7 @@ BOOST_AUTO_TEST_CASE(server_idle_timeout)
 
             client->write_query(yield, ricochet::query::make_connect_query(red, blue));
 
-            ricochet::reply reply(4096);
+            reply.resize(4096);
             client->read_reply(yield, reply);
         }
         catch (const boost::system::system_error&)

@@ -16,7 +16,7 @@ struct LoggingFixture
 {
     LoggingFixture()
     {
-        ricochet::logging::init_console_logging(boost::log::trivial::info);
+        ricochet::logging::init_console_logging(boost::log::trivial::trace);
     }
 
     ~LoggingFixture()

@@ -57,7 +57,7 @@ integration_test_fixture::integration_test_fixture()
 
 integration_test_fixture::~integration_test_fixture()
 {
-    m_io.stop();
+    m_work.reset();
     m_pool.join();
 }
 

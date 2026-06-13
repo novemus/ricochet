@@ -23,7 +23,7 @@ class session : public std::enable_shared_from_this<session>
 {
     boost::asio::io_context& m_io;
     std::shared_ptr<boost::asio::ssl::context> m_ssl;
-    boost::asio::ssl::stream<boost::asio::ip::tcp::socket> m_socket;
+    std::shared_ptr<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>> m_socket;
     std::shared_ptr<heap> m_heap;
     boost::asio::deadline_timer m_timer;
     boost::posix_time::seconds m_wait;
@@ -38,7 +38,7 @@ public:
 
     session(boost::asio::io_context& io,
             std::shared_ptr<boost::asio::ssl::context> ssl,
-            boost::asio::ssl::stream<boost::asio::ip::tcp::socket> socket,
+            std::shared_ptr<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>> socket,
             std::shared_ptr<heap> heap,
             boost::posix_time::seconds wait,
             boost::posix_time::seconds idle);

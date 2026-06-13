@@ -16,13 +16,13 @@ namespace ricochet {
 
 session::session(boost::asio::io_context& io,
                  std::shared_ptr<boost::asio::ssl::context> ssl,
-                 boost::asio::ssl::stream<boost::asio::ip::tcp::socket> socket,
+                 std::shared_ptr<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>> socket,
                  std::shared_ptr<heap> heap,
                  boost::posix_time::seconds wait,
                  boost::posix_time::seconds idle)
     : m_io(io)
     , m_ssl(ssl)
-    , m_socket(std::move(socket))
+    , m_socket(socket)
     , m_heap(heap)
     , m_timer(m_io)
     , m_wait(wait)
@@ -35,8 +35,8 @@ session::session(boost::asio::io_context& io,
 
 session::~session()
 {
-    _trc_("Session " << this << " destroyed");
     do_close();
+    _trc_("Session " << this << " destroyed");
 }
 
 void session::start(bool reject, final_callback clean)
@@ -86,7 +86,7 @@ void session::close()
         }
 
         boost::system::error_code ec;
-        m_socket.lowest_layer().cancel(ec);
+        m_socket->lowest_layer().cancel(ec);
     });
 }
 
@@ -95,11 +95,11 @@ void session::do_close()
     boost::system::error_code ec;
     m_timer.cancel(ec);
 
-    if (m_socket.lowest_layer().is_open())
+    if (m_socket->lowest_layer().is_open())
     {
         boost::system::error_code ec;
-        m_socket.lowest_layer().shutdown(boost::asio::socket_base::shutdown_type::shutdown_both, ec);
-        m_socket.lowest_layer().close(ec);
+        m_socket->lowest_layer().shutdown(boost::asio::socket_base::shutdown_type::shutdown_both, ec);
+        m_socket->lowest_layer().close(ec);
 
         _inf_ << "Session " << this << " channel closed";
     }
@@ -118,7 +118,7 @@ void session::do_shutdown()
     boost::system::error_code ec;
     m_timer.cancel(ec);
 
-    auto finalize = [this, weak = weak_from_this()](const boost::system::error_code& err)
+    auto finalize = [this, weak = weak_from_this(), ssl = m_ssl, socket = m_socket](const boost::system::error_code& err)
     {
         auto self = weak.lock();
         if (!self)
@@ -132,14 +132,14 @@ void session::do_shutdown()
 
     m_timer.expires_from_now(boost::posix_time::seconds(2));
     m_timer.async_wait(finalize);
-    m_socket.async_shutdown(finalize);
+    m_socket->async_shutdown(finalize);
 }
 
 void session::do_read_header()
 {
     start_timer();
-    m_socket.async_read_some(boost::asio::buffer(m_query.data(), query::header_size),
-        [this, weak = weak_from_this()](const boost::system::error_code& ec, std::size_t size)
+    m_socket->async_read_some(boost::asio::buffer(m_query.data(), query::header_size),
+        [this, weak = weak_from_this(), ssl = m_ssl, socket = m_socket](const boost::system::error_code& ec, std::size_t size)
         {
             auto self = weak.lock();
             if (!self)
@@ -189,8 +189,8 @@ void session::do_read_header()
 void session::do_read_payload()
 {
     start_timer();
-    m_socket.async_read_some(boost::asio::buffer(m_query.data() + query::header_size, m_query.length()),
-        [this, weak = weak_from_this()](const boost::system::error_code& ec, std::size_t size)
+    m_socket->async_read_some(boost::asio::buffer(m_query.data() + query::header_size, m_query.length()),
+        [this, weak = weak_from_this(), ssl = m_ssl, socket = m_socket](const boost::system::error_code& ec, std::size_t size)
         {
             auto self = weak.lock();
             if (!self)
@@ -265,8 +265,8 @@ void session::handle_query()
 void session::do_write(const ricochet::reply& msg)
 {
     start_timer();
-    boost::asio::async_write(m_socket, boost::asio::buffer(msg.data(), msg.size()),
-        [this, weak = weak_from_this(), msg](const boost::system::error_code& ec, std::size_t)
+    boost::asio::async_write(*m_socket, boost::asio::buffer(msg.data(), msg.size()),
+        [this, weak = weak_from_this(), msg, ssl = m_ssl, socket = m_socket](const boost::system::error_code& ec, std::size_t)
         {
             auto self = weak.lock();
             if (!self)
@@ -394,7 +394,7 @@ void session::start_timer()
             m_break = true;
 
             boost::system::error_code ec;
-            m_socket.lowest_layer().cancel(ec);
+            m_socket->lowest_layer().cancel(ec);
         }
     });
 }

@@ -115,7 +115,7 @@ void server::accept()
 
                         std::lock_guard<std::mutex> lock(m_mutex);
 
-                        auto relay = std::make_shared<session>(m_io, m_ssl, std::move(*socket), m_heap, m_config.wait_timeout, m_config.idle_timeout);
+                        auto relay = std::make_shared<session>(m_io, m_ssl, socket, m_heap, m_config.wait_timeout, m_config.idle_timeout);
                         bool reject = !check_limits(hash);
 
                         m_relays[hash].insert(relay);
