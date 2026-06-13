@@ -43,7 +43,7 @@ client::~client()
     if (!m_socket || !m_socket->lowest_layer().is_open())
         return;
 
-    boost::asio::spawn(m_socket->get_executor(), [socket = std::move(m_socket)](boost::asio::yield_context yield)
+    boost::asio::spawn(m_socket->get_executor(), [socket = m_socket](boost::asio::yield_context yield)
     {
         execute(yield, [yield, socket]()
         {
