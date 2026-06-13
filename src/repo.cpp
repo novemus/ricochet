@@ -8,6 +8,7 @@
  * 
  */
 
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <iomanip>
@@ -25,7 +26,7 @@ repository::repository(const std::filesystem::path& repo)
 
 bool repository::is_certificate_allowed(X509* cert) const
 {
-    if (!cert)
+    if (!cert || !std::filesystem::exists(m_repo))
         return false;
 
     update_cache_incremental();
@@ -111,6 +112,9 @@ void repository::update_cache_incremental() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
 
+    if (!std::filesystem::exists(m_repo))
+        return;
+
     auto files = collect_current_certificate_files();
 
     auto& paths = m_cache.get<by_path>();
@@ -160,26 +164,28 @@ std::set<std::filesystem::path> repository::collect_current_certificate_files() 
 {
     std::set<std::filesystem::path> files;
 
-    for (const auto& owner : std::filesystem::directory_iterator(m_repo))
+    if (std::filesystem::exists(m_repo))
     {
-        if (!owner.is_directory())
-            continue;
-
-        for (const auto& host : std::filesystem::directory_iterator(owner))
+        for (const auto& owner : std::filesystem::directory_iterator(m_repo))
         {
-            if (!host.is_directory())
+            if (!owner.is_directory())
                 continue;
 
-            for (const auto& file : std::filesystem::directory_iterator(host))
+            for (const auto& host : std::filesystem::directory_iterator(owner))
             {
-                if (file.path().extension() == ".crt" || file.path().extension() == ".pem" )
+                if (!host.is_directory())
+                    continue;
+
+                for (const auto& file : std::filesystem::directory_iterator(host))
                 {
-                    files.insert(std::filesystem::absolute(file.path()));
+                    if (file.path().extension() == ".crt" || file.path().extension() == ".pem" )
+                    {
+                        files.insert(std::filesystem::absolute(file.path()));
+                    }
                 }
             }
         }
     }
-
     return files;
 }
 

@@ -13,6 +13,7 @@
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/variables_map.hpp>
 #include <iostream>
+#include <fstream>
 #include <filesystem>
 #include <vector>
 #include <thread>
@@ -30,34 +31,50 @@ int main(int argc, char* argv[])
             ("help", "show help message")
             ("address", po::value<std::string>()->default_value("0.0.0.0"), "listen address")
             ("port", po::value<uint16_t>()->default_value(7411), "listen port")
-            ("pool", po::value<uint16_t>()->default_value(100), "relay port pool (next to the listen port)")
-            ("cert", po::value<std::filesystem::path>()->default_value("server.pem"), "SSL certificate file")
-            ("key", po::value<std::filesystem::path>()->default_value("server.key"), "SSL private key file")
-            ("ca", po::value<std::filesystem::path>()->default_value(""), "CA certificate file")
-            ("repo", po::value<std::filesystem::path>()->default_value(std::filesystem::current_path()), "path to client SSL certificate repository")
+            ("span", po::value<uint16_t>()->default_value(100), "span of relay ports (next to the listen port)")
+            ("cert", po::value<std::filesystem::path>()->default_value("ricochet.pem"), "SSL certificate file")
+            ("key", po::value<std::filesystem::path>()->default_value("ricochet.key"), "SSL private key file")
+            ("ca", po::value<std::filesystem::path>(), "CA certificate file (not needed for repository clients)")
+            ("repo", po::value<std::filesystem::path>(), "client certificate repository (optional)")
             ("wait", po::value<int>()->default_value(30), "wait for relay connection (seconds)")
             ("idle", po::value<int>()->default_value(180), "idle relay timeout (seconds)")
             ("quota", po::value<uint32_t>()->default_value(10), "maximum relays per client")
-            ("limit", po::value<uint32_t>()->default_value(100), "maximum relays count")
-            ("report", po::value<std::string>()->default_value("info"), "report level (trace, debug, info, warning, error, fatal)")
-            ("journal", po::value<std::filesystem::path>(), "journal file (optional)");
+            ("limit", po::value<uint32_t>()->default_value(100), "maximum count of relays")
+            ("report", po::value<std::string>()->default_value("info"), "report detailing (trace, debug, info, warning, error, fatal)")
+            ("journal", po::value<std::filesystem::path>(), "journal file (console output by default)")
+            ("config", po::value<std::filesystem::path>(), "ini-like configuration file (optional)");
+
+        po::positional_options_description conf;
+        conf.add("config", 1);
 
         po::variables_map vm;
-        po::store(po::parse_command_line(argc, argv, desc), vm);
-        po::notify(vm);
+        po::store(po::command_line_parser(argc, argv).options(desc).positional(conf).run(), vm);
 
         if (vm.count("help"))
         {
-            std::cout << desc << "\n";
+            std::cout << desc << std::endl;
             return 0;
         }
 
-        boost::log::trivial::severity_level report = ricochet::logging::parse_log_level(vm["report"].as<std::string>());
-        ricochet::logging::init_console_logging(report);
+        if (vm.count("config"))
+        {
+            std::ifstream config(vm["config"].as<std::filesystem::path>());
+            if (!config)
+                throw std::runtime_error("Cannot open configuration file: " + vm["config"].as<std::filesystem::path>().string());
 
+            po::store(po::parse_config_file(config, desc, true), vm);
+        }
+
+        po::notify(vm);
+
+        boost::log::trivial::severity_level report = ricochet::logging::parse_log_level(vm["report"].as<std::string>());
         if (vm.count("journal"))
         {
-            ricochet::logging::init_file_logging(vm["journal"].as<std::filesystem::path>().string(), report);
+            ricochet::logging::init_file_logging(std::filesystem::canonical(vm["journal"].as<std::filesystem::path>()).string(), report);
+        }
+        else 
+        {
+            ricochet::logging::init_console_logging(report);
         }
 
         if (vm["wait"].as<int>() <= 0)
@@ -85,27 +102,19 @@ int main(int argc, char* argv[])
         }
 
         ricochet::config config;
-        config.server_endpoint = boost::asio::ip::tcp::endpoint(
-            boost::asio::ip::make_address(vm["address"].as<std::string>()),
-            vm["port"].as<uint16_t>()
-        );
+        config.server_endpoint = boost::asio::ip::tcp::endpoint(boost::asio::ip::make_address(vm["address"].as<std::string>()), vm["port"].as<uint16_t>());
         config.relay_port_base = vm["port"].as<uint16_t>() + 1;
-        config.relay_port_span = vm["pool"].as<uint16_t>();
-        config.server_cert = vm["cert"].as<std::filesystem::path>();
-        config.server_key = vm["key"].as<std::filesystem::path>();
-        config.ca_cert = vm["ca"].as<std::filesystem::path>();
-        config.client_repo = vm["repo"].as<std::filesystem::path>();
+        config.relay_port_span = vm["span"].as<uint16_t>();
+        config.server_cert = std::filesystem::canonical(vm["cert"].as<std::filesystem::path>());
+        config.server_key = std::filesystem::canonical(vm["key"].as<std::filesystem::path>());
+        config.ca_cert = vm.count("ca") ? std::filesystem::canonical(vm["ca"].as<std::filesystem::path>()) : std::filesystem::path();
+        config.client_repo = vm.count("repo") ? std::filesystem::canonical(vm["repo"].as<std::filesystem::path>()) : std::filesystem::path();
         config.wait_timeout = boost::posix_time::seconds(vm["wait"].as<int>());
         config.idle_timeout = boost::posix_time::seconds(vm["idle"].as<int>());
         config.client_relay_limit = vm["quota"].as<uint32_t>();
         config.total_relay_limit = vm["limit"].as<uint32_t>();
 
-        boost::asio::io_context io;
-        auto server = std::make_shared<ricochet::server>(io, config);
-
-        unsigned int thread_count = std::max(4u, std::thread::hardware_concurrency());
-
-        _inf_ << "Starting Ricochet relay server on " << config.server_endpoint.address() << ":" << config.server_endpoint.port();
+        _inf_ << "Ricochet server: " << config.server_endpoint;
         _inf_ << "Relay port base: " << config.relay_port_base;
         _inf_ << "Relay port span: " << config.relay_port_span;
         _inf_ << "SSL certificate: " << config.server_cert;
@@ -114,14 +123,15 @@ int main(int argc, char* argv[])
         _inf_ << "Client repository: " << config.client_repo;
         _inf_ << "Wait timeout: " << config.wait_timeout.total_seconds() << " seconds";
         _inf_ << "Idle timeout: " << config.idle_timeout.total_seconds() << " seconds";
-        _inf_ << "Max sessions per client: " << config.client_relay_limit;
-        _inf_ << "Max total sessions: " << config.total_relay_limit;
-        _inf_ << "Using " << thread_count << " worker threads";
+        _inf_ << "Max relays per client: " << config.client_relay_limit;
+        _inf_ << "Max total relays: " << config.total_relay_limit;
 
+        boost::asio::io_context io;
+        auto server = std::make_shared<ricochet::server>(io, config);
         server->start();
 
         std::vector<std::thread> workers;
-        for (unsigned int i = 1; i < thread_count; ++i)
+        for (unsigned int i = 1; i < std::max(4u, std::thread::hardware_concurrency()); ++i)
         {
             workers.emplace_back([&io]()
             {
