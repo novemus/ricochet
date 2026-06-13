@@ -8,6 +8,7 @@
  * 
  */
 
+#include <atomic>
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/test/unit_test.hpp>
@@ -186,21 +187,17 @@ struct udp_helper
 {
     static void swap(boost::asio::ip::udp::socket& left, boost::asio::ip::udp::socket& right, const std::vector<uint8_t>& data)
     {
+        std::atomic_bool sending = true;
         boost::asio::deadline_timer resend_timer(left.get_executor());
         auto send_future = boost::asio::spawn(right.get_executor(), [&](boost::asio::yield_context yield)
         {
-            boost::system::error_code ec;
-
-            left.async_send(boost::asio::buffer(data), yield[ec]);
-            right.async_send(boost::asio::buffer(data), yield[ec]);
-
-            resend_timer.expires_from_now(boost::posix_time::milliseconds(100));
-            resend_timer.async_wait(yield[ec]);
-
-            if (ec.value() != boost::asio::error::operation_aborted)
+            while (sending)
             {
+                boost::system::error_code ec;
                 left.async_send(boost::asio::buffer(data), yield[ec]);
                 right.async_send(boost::asio::buffer(data), yield[ec]);
+                resend_timer.expires_from_now(boost::posix_time::milliseconds(100));
+                resend_timer.async_wait(yield[ec]);
             }
         },
         boost::asio::use_future);
@@ -212,6 +209,7 @@ struct udp_helper
             close_timer.expires_from_now(boost::posix_time::milliseconds(500));
             close_timer.async_wait(yield[ec]);
 
+            sending = false;
             if (ec.value() != boost::asio::error::operation_aborted)
             {
                 left.close(ec);
@@ -253,19 +251,16 @@ struct udp_helper
 
     static void push(boost::asio::ip::udp::socket& from, boost::asio::ip::udp::socket& to, const std::vector<uint8_t>& data)
     {
+        std::atomic_bool sending = true;
         boost::asio::deadline_timer resend_timer(from.get_executor());
         auto send_future = boost::asio::spawn(from.get_executor(), [&](boost::asio::yield_context yield)
         {
-            boost::system::error_code ec;
-
-            from.async_send(boost::asio::buffer(data), yield[ec]);
-
-            resend_timer.expires_from_now(boost::posix_time::milliseconds(100));
-            resend_timer.async_wait(yield[ec]);
-
-            if (ec.value() != boost::asio::error::operation_aborted)
+            while (sending)
             {
+                boost::system::error_code ec;
                 from.async_send(boost::asio::buffer(data), yield[ec]);
+                resend_timer.expires_from_now(boost::posix_time::milliseconds(100));
+                resend_timer.async_wait(yield[ec]);
             }
         },
         boost::asio::use_future);
@@ -277,6 +272,7 @@ struct udp_helper
             close_timer.expires_from_now(boost::posix_time::milliseconds(500));
             close_timer.async_wait(yield[ec]);
 
+            sending = false;
             if (ec.value() != boost::asio::error::operation_aborted)
             {
                 to.close(ec);
