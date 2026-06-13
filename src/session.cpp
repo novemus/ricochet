@@ -101,7 +101,7 @@ void session::do_close()
         m_socket.lowest_layer().shutdown(boost::asio::socket_base::shutdown_type::shutdown_both, ec);
         m_socket.lowest_layer().close(ec);
 
-        _inf_ << "Session " << this << " closed";
+        _inf_ << "Session " << this << " channel closed";
     }
 
     if (m_final)
@@ -113,7 +113,7 @@ void session::do_close()
 
 void session::do_shutdown()
 {
-    _trc_("Session " << this << " shutdown...");
+    _trc_("Session " << this << " channel shutdown...");
 
     boost::system::error_code ec;
     m_timer.cancel(ec);
@@ -124,7 +124,7 @@ void session::do_shutdown()
         if (!self)
             return;
 
-        _trc_("Session " << this << " shutdown" << (err ? ": "  + err.message() : ""));
+        _trc_("Session " << this << " channel shutdown" << (err ? ": "  + err.message() : ""));
 
         std::lock_guard<std::mutex> lock(m_mutex);
         do_close();
@@ -240,24 +240,24 @@ void session::handle_query()
                 handle_connect_query();
                 break;
             default:
-                _wrn_ << "Session " << this << " unknown query type " << static_cast<int>(m_query.type());
+                _wrn_ << "Session " << this << " unknown query " << static_cast<int>(m_query.type());
                 send_error_reply(ricochet::failure::malformed_message);
                 break;
         }
     }
     catch (const malformed_message& e)
     {
-        _wrn_ << "Session " << this << " malformed message: " << e.what();
+        _wrn_ << "Session " << this << " malformed message";
         send_error_reply(ricochet::failure::malformed_message);
     }
     catch (const unavailable_proto& e)
     {
-        _wrn_ << "Session " << this << " unavailable protocol: " << e.what();
+        _wrn_ << "Session " << this << " unavailable protocol";
         send_error_reply(ricochet::failure::unavailable_proto);
     }
     catch (const std::exception& e)
     {
-        _err_ << "Session " << this << " server error: " << e.what();
+        _err_ << "Session " << this << " internal error: " << e.what();
         send_error_reply(ricochet::failure::server_error);
     }
 }
@@ -301,7 +301,7 @@ void session::do_write(const ricochet::reply& msg)
 void session::handle_provide_query()
 {
     auto proto = std::get<ricochet::protocol>(m_query.payload());
-    _inf_ << "Session " << this << " creating relay for protocol " << proto;
+    _inf_ << "Session " << this << " handling provide query for " << proto;
 
     switch (proto)
     {
@@ -388,7 +388,7 @@ void session::start_timer()
 
         if (!ec)
         {
-            _inf_ << "Session " << this << " timeout";
+            _inf_ << "Session " << this << " channel timeout";
 
             std::lock_guard<std::mutex> lock(m_mutex);
             m_break = true;
