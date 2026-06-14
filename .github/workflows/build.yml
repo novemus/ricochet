@@ -50,8 +50,8 @@ jobs:
 
       - name: Package (DEB)
         run: |
-          cmake --cpack --preset debian-server
-          cmake --cpack --preset debian-client
+          cpack --preset debian-server
+          cpack --preset debian-client
 
       - name: Upload DEB packages
         uses: actions/upload-artifact@v4
@@ -96,8 +96,8 @@ jobs:
 
       - name: Package (RPM)
         run: |
-          cmake --cpack --preset linux-server
-          cmake --cpack --preset linux-client
+          cpack --preset linux-server
+          cpack --preset linux-client
 
       - name: Upload RPM packages
         uses: actions/upload-artifact@v4
@@ -127,6 +127,7 @@ jobs:
         uses: lukka/run-cmake@v10
         with:
           configurePreset: static-relwithdebinfo
+          configurePresetAdditionalArgs: "['-DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake', '-DVCPKG_TARGET_TRIPLET=${{ env.TARGET_ARCH }}-windows-static']"
           buildPreset: static-relwithdebinfo
           testPreset: static-relwithdebinfo
 
@@ -134,13 +135,14 @@ jobs:
         uses: lukka/run-cmake@v10
         with:
           configurePreset: shared-relwithdebinfo
+          configurePresetAdditionalArgs: "['-DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake', '-DVCPKG_TARGET_TRIPLET=${{ env.TARGET_ARCH }}-windows']"
           buildPreset: shared-relwithdebinfo
           testPreset: shared-relwithdebinfo
 
       - name: Package (ZIP)
         run: |
-          cmake --cpack --preset server-archive
-          cmake --cpack --preset client-archive
+          cpack --preset server-archive
+          cpack --preset client-archive
 
       - name: Upload ZIP archives
         uses: actions/upload-artifact@v4
@@ -170,6 +172,7 @@ jobs:
         uses: lukka/run-cmake@v10
         with:
           configurePreset: static-relwithdebinfo
+          configurePresetAdditionalArgs: "['-DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake', '-DVCPKG_TARGET_TRIPLET=${{ env.TARGET_ARCH }}-osx']"
           buildPreset: static-relwithdebinfo
           testPreset: static-relwithdebinfo
 
@@ -177,13 +180,14 @@ jobs:
         uses: lukka/run-cmake@v10
         with:
           configurePreset: shared-relwithdebinfo
+          configurePresetAdditionalArgs: "['-DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake', '-DVCPKG_TARGET_TRIPLET=${{ env.TARGET_ARCH }}-osx-dynamic']"
           buildPreset: shared-relwithdebinfo
           testPreset: shared-relwithdebinfo
 
       - name: Package (ZIP)
         run: |
-          cmake --cpack --preset server-archive
-          cmake --cpack --preset client-archive
+          cpack --preset server-archive
+          cpack --preset client-archive
 
       - name: Upload ZIP archives
         uses: actions/upload-artifact@v4
