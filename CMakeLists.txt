@@ -36,6 +36,7 @@ add_executable(ricochet
 target_link_libraries(ricochet Boost::coroutine Boost::program_options Boost::log OpenSSL::Crypto OpenSSL::SSL)
 target_include_directories(ricochet PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR})
 set_target_properties(ricochet PROPERTIES DEBUG_POSTFIX "d")
+target_compile_definitions(ricochet PRIVATE LIBRICOCHET_STATIC_DEFINE)
 
 include(GenerateExportHeader)
 
@@ -124,6 +125,27 @@ endif()
 
 enable_testing()
 
+set(TEST_CONTEXT_DIR "${CMAKE_CURRENT_BINARY_DIR}/test_context")
+file(MAKE_DIRECTORY "${TEST_CONTEXT_DIR}/repo/test_client/localhost")
+
+if(WIN32)
+    configure_file("${CMAKE_SOURCE_DIR}/tests/certs/ca.crt" "${TEST_CONTEXT_DIR}/ca.crt" COPYONLY)
+    configure_file("${CMAKE_SOURCE_DIR}/tests/certs/server.crt" "${TEST_CONTEXT_DIR}/server.crt" COPYONLY)
+    configure_file("${CMAKE_SOURCE_DIR}/tests/certs/server.pem" "${TEST_CONTEXT_DIR}/server.pem" COPYONLY)
+    configure_file("${CMAKE_SOURCE_DIR}/tests/certs/server.key" "${TEST_CONTEXT_DIR}/server.key" COPYONLY)
+    configure_file("${CMAKE_SOURCE_DIR}/tests/certs/client.crt" "${TEST_CONTEXT_DIR}/repo/test_client/localhost/client.crt" COPYONLY)
+    configure_file("${CMAKE_SOURCE_DIR}/tests/certs/client.pem" "${TEST_CONTEXT_DIR}/repo/test_client/localhost/client.pem" COPYONLY)
+    configure_file("${CMAKE_SOURCE_DIR}/tests/certs/client.key" "${TEST_CONTEXT_DIR}/repo/test_client/localhost/client.key" COPYONLY)
+else()
+    file(CREATE_LINK "${CMAKE_SOURCE_DIR}/tests/certs/ca.crt" "${TEST_CONTEXT_DIR}/ca.crt" SYMBOLIC)
+    file(CREATE_LINK "${CMAKE_SOURCE_DIR}/tests/certs/server.crt" "${TEST_CONTEXT_DIR}/server.crt" SYMBOLIC)
+    file(CREATE_LINK "${CMAKE_SOURCE_DIR}/tests/certs/server.pem" "${TEST_CONTEXT_DIR}/server.pem" SYMBOLIC)
+    file(CREATE_LINK "${CMAKE_SOURCE_DIR}/tests/certs/server.key" "${TEST_CONTEXT_DIR}/server.key" SYMBOLIC)
+    file(CREATE_LINK "${CMAKE_SOURCE_DIR}/tests/certs/client.crt" "${TEST_CONTEXT_DIR}/repo/test_client/localhost/client.crt" SYMBOLIC)
+    file(CREATE_LINK "${CMAKE_SOURCE_DIR}/tests/certs/client.pem" "${TEST_CONTEXT_DIR}/repo/test_client/localhost/client.pem" SYMBOLIC)
+    file(CREATE_LINK "${CMAKE_SOURCE_DIR}/tests/certs/client.key" "${TEST_CONTEXT_DIR}/repo/test_client/localhost/client.key" SYMBOLIC)
+endif()
+
 add_executable(ricochet_tests
     src/proto.cpp
     src/repo.cpp
@@ -153,7 +175,7 @@ target_link_libraries(ricochet_tests Boost::coroutine Boost::log Boost::unit_tes
 target_include_directories(ricochet_tests PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR})
 set_target_properties(ricochet_tests PROPERTIES DEBUG_POSTFIX "d")
 
-target_compile_definitions(ricochet_tests PRIVATE LIBRICOCHET_STATIC_DEFINE)
+target_compile_definitions(ricochet_tests PRIVATE LIBRICOCHET_STATIC_DEFINE TEST_CONTEXT_DIR="${TEST_CONTEXT_DIR}")
 
 add_test(NAME ricochet_tests COMMAND ricochet_tests)
 

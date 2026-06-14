@@ -9,13 +9,10 @@
  */
 
 #include <filesystem>
-#include <random>
 #include <string>
 #include "fixture.h"
 
-namespace fs = std::filesystem;
-
-integration_test_fixture::context::context() : repo(fs::temp_directory_path() / ("ricochet_server_test_"  + std::to_string(std::random_device{}())) / "repo")
+integration_test_fixture::context::context() : repo(std::filesystem::path(TEST_CONTEXT_DIR) / "repo")
 {
     ca_cert = repo.parent_path() / "ca.crt";
     server_cert = repo.parent_path() / "server.crt";
@@ -24,23 +21,6 @@ integration_test_fixture::context::context() : repo(fs::temp_directory_path() / 
     client_cert = repo / "test_client" / "localhost" / "client.crt";
     client_self_cert = repo / "test_client" / "localhost" / "client.pem";
     client_key = repo / "test_client" / "localhost" / "client.key";
-
-    std::filesystem::create_directories(repo);
-    std::filesystem::create_directories(repo / "test_client" / "localhost");
-
-    std::filesystem::create_symlink(std::filesystem::canonical(std::filesystem::path(__FILE__).parent_path() / "../certs/ca.crt"), ca_cert);
-    std::filesystem::create_symlink(std::filesystem::canonical(std::filesystem::path(__FILE__).parent_path() / "../certs/server.crt"), server_cert);
-    std::filesystem::create_symlink(std::filesystem::canonical(std::filesystem::path(__FILE__).parent_path() / "../certs/server.pem"), server_self_cert);
-    std::filesystem::create_symlink(std::filesystem::canonical(std::filesystem::path(__FILE__).parent_path() / "../certs/server.key"), server_key);
-    std::filesystem::create_symlink(std::filesystem::canonical(std::filesystem::path(__FILE__).parent_path() / "../certs/client.crt"), client_cert);
-    std::filesystem::create_symlink(std::filesystem::canonical(std::filesystem::path(__FILE__).parent_path() / "../certs/client.pem"), client_self_cert);
-    std::filesystem::create_symlink(std::filesystem::canonical(std::filesystem::path(__FILE__).parent_path() / "../certs/client.key"), client_key);
-}
-
-integration_test_fixture::context::~context()
-{
-    if (std::filesystem::exists(repo.parent_path()))
-        std::filesystem::remove_all(repo.parent_path());
 }
 
 integration_test_fixture::integration_test_fixture()

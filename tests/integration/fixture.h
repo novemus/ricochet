@@ -33,7 +33,6 @@ class integration_test_fixture
         std::filesystem::path server_key;
 
         context();
-        ~context();
     };
 
     context& get_test_context() { static context s_context; return s_context; }
