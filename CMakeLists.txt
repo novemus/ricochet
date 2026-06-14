@@ -34,7 +34,7 @@ add_executable(ricochet
 )
 
 target_link_libraries(ricochet Boost::coroutine Boost::program_options Boost::log OpenSSL::Crypto OpenSSL::SSL)
-target_include_directories(ricochet PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(ricochet PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR})
 set_target_properties(ricochet PROPERTIES DEBUG_POSTFIX "d")
 
 include(GenerateExportHeader)

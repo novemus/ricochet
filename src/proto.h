@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <ostream>
 #include <stdexcept>
+#include "export.h"
 
 namespace ricochet {
 
@@ -70,7 +71,7 @@ enum class failure : uint8_t
     limit_reached = 3
 };
 
-struct buffer
+struct LIBRICOCHET_EXPORT buffer
 {
     buffer() = default;
     explicit buffer(std::size_t size) : m_data(size) {}
@@ -87,7 +88,7 @@ protected:
     std::vector<uint8_t> m_data;
 };
 
-struct endpoint : public buffer
+struct LIBRICOCHET_EXPORT endpoint : public buffer
 {
     boost::asio::ip::address address() const;
     uint16_t port() const;
@@ -97,7 +98,7 @@ struct endpoint : public buffer
     explicit endpoint(const std::vector<uint8_t>& data) : buffer(data) {}
 };
 
-struct peer : public buffer
+struct LIBRICOCHET_EXPORT peer : public buffer
 {
     endpoint location() const;
     schema role() const;
@@ -107,7 +108,7 @@ struct peer : public buffer
     explicit peer(const std::vector<uint8_t>& data) : buffer(data) {}
 };
 
-struct couple : public buffer
+struct LIBRICOCHET_EXPORT couple : public buffer
 {
     peer red() const;
     peer blue() const;
@@ -118,7 +119,7 @@ struct couple : public buffer
     explicit couple(const std::vector<uint8_t>& data) : buffer(data) {}
 };
 
-struct query : public buffer
+struct LIBRICOCHET_EXPORT query : public buffer
 {
     static constexpr size_t header_size = 3;
 
@@ -142,7 +143,7 @@ struct query : public buffer
     static query make_connect_query(const peer& red, const peer& blue);
 };
 
-struct reply : public buffer
+struct LIBRICOCHET_EXPORT reply : public buffer
 {
     static constexpr size_t header_size = 3;
 
