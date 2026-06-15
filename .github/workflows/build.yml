@@ -8,6 +8,9 @@ on:
 
 env:
   VCPKG_COMMIT: ef7dbf94b9198bc58f45951adcf1f041fcbc5ea0
+  PACKAGE_RELEASE: ${{ vars.PACKAGE_RELEASE || 1 }}
+  MAINTAINER: "${{ vars.MAINTAINER }}"
+  HOMEPAGE: "${{ github.server_url }}/${{ github.repository }}"
 
 jobs:
   debian:
@@ -38,13 +41,13 @@ jobs:
 
       - name: Configure, build and test (static-relwithdebinfo)
         run: |
-          cmake --preset static-relwithdebinfo
+          cmake --preset static-relwithdebinfo -DCPACK_PACKAGE_RELEASE=${{ env.PACKAGE_RELEASE }} -DCPACK_DEBIAN_PACKAGE_MAINTAINER="${{ env.MAINTAINER }}" -DCPACK_DEBIAN_PACKAGE_HOMEPAGE="${{ env.HOMEPAGE }}"
           cmake --build --preset static-relwithdebinfo
           ctest --preset static-relwithdebinfo
 
       - name: Configure, build and test (shared-relwithdebinfo)
         run: |
-          cmake --preset shared-relwithdebinfo
+          cmake --preset shared-relwithdebinfo -DCPACK_PACKAGE_RELEASE=${{ env.PACKAGE_RELEASE }} -DCPACK_DEBIAN_PACKAGE_MAINTAINER="${{ env.MAINTAINER }}" -DCPACK_DEBIAN_PACKAGE_HOMEPAGE="${{ env.HOMEPAGE }}"
           cmake --build --preset shared-relwithdebinfo
           ctest --preset shared-relwithdebinfo
 
@@ -57,12 +60,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ricochet-debian-x64
-          path: out/${{ env.TARGET_OS }}/${{ env.TARGET_ARCH }}/build/*.deb
+          path: |
+            out/${{ env.TARGET_OS }}/${{ env.TARGET_ARCH }}/build/*.deb
+            out/${{ env.TARGET_OS }}/${{ env.TARGET_ARCH }}/build/*.ddeb
           if-no-files-found: error
           retention-days: 7
 
   fedora:
-    name: fedora-42-x64
+    name: fedora-x64
     runs-on: ubuntu-latest
     container: fedora:42
     env:
@@ -84,13 +89,13 @@ jobs:
 
       - name: Configure, build and test (static-relwithdebinfo)
         run: |
-          cmake --preset static-relwithdebinfo
+          cmake --preset static-relwithdebinfo -DCPACK_PACKAGE_RELEASE=${{ env.PACKAGE_RELEASE }} -DCPACK_RPM_PACKAGE_VENDOR="${{ env.MAINTAINER }}" -DCPACK_RPM_PACKAGE_URL="${{ env.HOMEPAGE }}"
           cmake --build --preset static-relwithdebinfo
           ctest --preset static-relwithdebinfo
 
       - name: Configure, build and test (shared-relwithdebinfo)
         run: |
-          cmake --preset shared-relwithdebinfo
+          cmake --preset shared-relwithdebinfo -DCPACK_PACKAGE_RELEASE=${{ env.PACKAGE_RELEASE }} -DCPACK_RPM_PACKAGE_VENDOR="${{ env.MAINTAINER }}" -DCPACK_RPM_PACKAGE_URL="${{ env.HOMEPAGE }}"
           cmake --build --preset shared-relwithdebinfo
           ctest --preset shared-relwithdebinfo
 
@@ -127,7 +132,7 @@ jobs:
         uses: lukka/run-cmake@v10
         with:
           configurePreset: static-relwithdebinfo
-          configurePresetAdditionalArgs: "['-DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake', '-DVCPKG_TARGET_TRIPLET=${{ env.TARGET_ARCH }}-windows-static']"
+          configurePresetAdditionalArgs: "['-DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake', '-DVCPKG_TARGET_TRIPLET=${{ env.TARGET_ARCH }}-windows-static', '-DCPACK_PACKAGE_RELEASE=${{ env.PACKAGE_RELEASE }}']"
           buildPreset: static-relwithdebinfo
           testPreset: static-relwithdebinfo
 
@@ -135,7 +140,7 @@ jobs:
         uses: lukka/run-cmake@v10
         with:
           configurePreset: shared-relwithdebinfo
-          configurePresetAdditionalArgs: "['-DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake', '-DVCPKG_TARGET_TRIPLET=${{ env.TARGET_ARCH }}-windows']"
+          configurePresetAdditionalArgs: "['-DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake', '-DVCPKG_TARGET_TRIPLET=${{ env.TARGET_ARCH }}-windows', '-DCPACK_PACKAGE_RELEASE=${{ env.PACKAGE_RELEASE }}']"
           buildPreset: shared-relwithdebinfo
           testPreset: shared-relwithdebinfo
 
@@ -172,7 +177,7 @@ jobs:
         uses: lukka/run-cmake@v10
         with:
           configurePreset: static-relwithdebinfo
-          configurePresetAdditionalArgs: "['-DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake', '-DVCPKG_TARGET_TRIPLET=${{ env.TARGET_ARCH }}-osx']"
+          configurePresetAdditionalArgs: "['-DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake', '-DVCPKG_TARGET_TRIPLET=${{ env.TARGET_ARCH }}-osx', '-DCPACK_PACKAGE_RELEASE=${{ env.PACKAGE_RELEASE }}']"
           buildPreset: static-relwithdebinfo
           testPreset: static-relwithdebinfo
 
@@ -180,7 +185,7 @@ jobs:
         uses: lukka/run-cmake@v10
         with:
           configurePreset: shared-relwithdebinfo
-          configurePresetAdditionalArgs: "['-DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake', '-DVCPKG_TARGET_TRIPLET=${{ env.TARGET_ARCH }}-osx-dynamic']"
+          configurePresetAdditionalArgs: "['-DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake', '-DVCPKG_TARGET_TRIPLET=${{ env.TARGET_ARCH }}-osx', '-DCPACK_PACKAGE_RELEASE=${{ env.PACKAGE_RELEASE }}']"
           buildPreset: shared-relwithdebinfo
           testPreset: shared-relwithdebinfo
 

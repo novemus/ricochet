@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Extract tag name
+        id: gittag
+        run: echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Download Artifacts
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: build.yml
+          branch: main
+          name: ricochet-debian-x64
+          path: dist/debian
+      - uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: build.yml
+          branch: main
+          name: ricochet-fedora-x64
+          path: dist/fedora
+      - uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: build.yml
+          branch: main
+          name: ricochet-windows-x64
+          path: dist/windows
+      - uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: build.yml
+          branch: main
+          name: ricochet-macos-arm64
+          path: dist/macos
+
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.gittag.outputs.TAG }}
+          name: ${{ steps.gittag.outputs.TAG }}
+          draft: true
+          prerelease: ${{ contains(steps.gittag.outputs.TAG, 'rc') || contains(steps.gittag.outputs.TAG, 'beta') }}
+          body: |
+            Packages for ${{ steps.gittag.outputs.TAG }}
+          artifacts: "dist/**/*"
+          allowUpdates: true
