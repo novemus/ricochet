@@ -23,6 +23,33 @@
 
 namespace ricochet {
 
+template<class var_t> var_t getenv(const std::string& name, const var_t& def)
+{
+    try
+    {
+        const char *env = std::getenv(name.c_str());
+        return env ? boost::lexical_cast<var_t>(env) : def;
+    }
+    catch (const boost::bad_lexical_cast& ex)
+    {
+        _err_ << ex.what();
+    }
+
+    return def;
+}
+
+inline size_t get_tcp_read_buffer_size()
+{
+    static const size_t size = getenv("RICOCHET_TCP_READ_BUFFER_SIZE", 1048576);
+    return size;
+}
+
+inline size_t get_udp_read_buffer_size()
+{
+    static const size_t size = getenv("RICOCHET_UDP_READ_BUFFER_SIZE", 65536);
+    return size;
+}
+
 boost::asio::ip::address get_outgoing_address(boost::asio::io_context& io, bool ip4)
 {
     try
@@ -283,12 +310,18 @@ void tcp_relay::start_relay(const peer& one, const peer& two)
                 if (one_matches)
                 {
                     _dbg_ << "TCP relay " << this << " accepted peer " << ep;
+
                     m_one = std::move(*peer);
+                    boost::system::error_code ec;
+                    m_one.set_option(boost::asio::ip::tcp::no_delay(true), ec);
                 }
                 else if (two_matches)
                 {
                     _dbg_ << "TCP relay " << this << " accepted peer " << ep;
+
                     m_two = std::move(*peer);
+                    boost::system::error_code ec;
+                    m_two.set_option(boost::asio::ip::tcp::no_delay(true), ec);
                 }
                 else
                 {
@@ -345,9 +378,19 @@ void tcp_relay::start_relay(const peer& one, const peer& two)
                 _dbg_ << "TCP relay " << this << " connected to peer " << ep;
 
                 if (ep.address() == one.location().address() && ep.port() == one.location().port())
+                {
                     m_one = std::move(*peer);
+
+                    boost::system::error_code ec;
+                    m_one.set_option(boost::asio::ip::tcp::no_delay(true), ec);
+                }
                 else
+                {
                     m_two = std::move(*peer);
+
+                    boost::system::error_code ec;
+                    m_two.set_option(boost::asio::ip::tcp::no_delay(true), ec);
+                }
 
                 m_reconnects = 0;
                 start_relay(one, two);
@@ -379,8 +422,8 @@ void tcp_relay::start_relay(const peer& one, const peer& two)
 
 void tcp_relay::transmit_data(boost::asio::ip::tcp::socket& from, boost::asio::ip::tcp::socket& to)
 {
-    auto buffer = std::make_shared<std::array<uint8_t, 8192>>();
-    from.async_read_some(boost::asio::buffer(buffer.get(), buffer->size()), 
+    auto buffer = std::make_shared<std::vector<uint8_t>>(get_tcp_read_buffer_size());
+    from.async_read_some(boost::asio::buffer(buffer->data(), buffer->size()), 
         m_strand.wrap([this, weak = weak_from_this(), buffer, &from, &to](const boost::system::error_code& ec, std::size_t size)
         {
             auto self = weak.lock();
@@ -391,7 +434,7 @@ void tcp_relay::transmit_data(boost::asio::ip::tcp::socket& from, boost::asio::i
             {
                 m_timestamp = std::chrono::steady_clock::now();
                 
-                boost::asio::async_write(to, boost::asio::buffer(buffer.get(), size),
+                boost::asio::async_write(to, boost::asio::buffer(buffer->data(), size),
                     m_strand.wrap([this, weak = weak_from_this(), &from, &to](const boost::system::error_code& ec, std::size_t)
                     {
                         auto self = weak.lock();
@@ -527,7 +570,7 @@ bool udp_relay::can_transmit() const
 
 void udp_relay::read_socket()
 {
-    auto buffer = std::make_shared<std::array<uint8_t, 8192>>();
+    auto buffer = std::make_shared<std::vector<uint8_t>>(get_udp_read_buffer_size());
     auto peer = std::make_shared<boost::asio::ip::udp::endpoint>();
 
     m_socket.async_receive_from(boost::asio::buffer(*buffer), *peer,
