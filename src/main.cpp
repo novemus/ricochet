@@ -70,7 +70,7 @@ int main(int argc, char* argv[])
         boost::log::trivial::severity_level report = ricochet::logging::parse_log_level(vm["report"].as<std::string>());
         if (vm.count("journal"))
         {
-            ricochet::logging::init_file_logging(std::filesystem::canonical(vm["journal"].as<std::filesystem::path>()).string(), report);
+            ricochet::logging::init_file_logging(std::filesystem::absolute(vm["journal"].as<std::filesystem::path>()).string(), report);
         }
         else 
         {
