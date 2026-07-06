@@ -246,7 +246,7 @@ void tcp_relay::close()
 void tcp_relay::watch_activity(boost::posix_time::seconds timeout)
 {
     m_timer.expires_from_now(timeout);
-    m_timer.async_wait(m_strand.wrap([this, weak = weak_from_this(), timeout](const boost::system::error_code& ec)
+    m_timer.async_wait(boost::asio::bind_executor(m_strand, [this, weak = weak_from_this(), timeout](const boost::system::error_code& ec)
     {
         auto self = weak.lock();
         if (!self)
@@ -288,7 +288,7 @@ void tcp_relay::start_relay(const peer& one, const peer& two)
     else if ((!m_one.is_open() && one.role() == schema::client) || (!m_two.is_open() && two.role() == schema::client))
     {
         auto peer = std::make_shared<boost::asio::ip::tcp::socket>(m_io); 
-        m_server.async_accept(*peer, m_strand.wrap([this, weak = weak_from_this(), peer, one, two](const boost::system::error_code& ec)
+        m_server.async_accept(*peer, boost::asio::bind_executor(m_strand, [this, weak = weak_from_this(), peer, one, two](const boost::system::error_code& ec)
         {
             auto self = weak.lock();
             if (!self)
@@ -367,7 +367,7 @@ void tcp_relay::start_relay(const peer& one, const peer& two)
                                           ? boost::asio::ip::tcp::endpoint(two.location().address(), two.location().port())
                                           : boost::asio::ip::tcp::endpoint(one.location().address(), one.location().port());
 
-        peer->async_connect(ep, m_strand.wrap([this, weak = weak_from_this(), peer, ep, one, two](const boost::system::error_code& ec)
+        peer->async_connect(ep, boost::asio::bind_executor(m_strand, [this, weak = weak_from_this(), peer, ep, one, two](const boost::system::error_code& ec)
         {
             auto self = weak.lock();
             if (!self)
@@ -401,7 +401,7 @@ void tcp_relay::start_relay(const peer& one, const peer& two)
                 _wrn_ << "TCP relay " << this << " connection refused to peer " << ep << ", retrying in " << m_reconnects * 2 << " seconds";
 
                 m_defer.expires_from_now(boost::posix_time::seconds(m_reconnects * 2));
-                m_defer.async_wait(m_strand.wrap([this, weak = weak_from_this(), one, two](const boost::system::error_code& ec)
+                m_defer.async_wait(boost::asio::bind_executor(m_strand, [this, weak = weak_from_this(), one, two](const boost::system::error_code& ec)
                 {
                     auto self = weak.lock();
                     if (!self)
@@ -424,7 +424,7 @@ void tcp_relay::transmit_data(boost::asio::ip::tcp::socket& from, boost::asio::i
 {
     auto buffer = std::make_shared<std::vector<uint8_t>>(get_tcp_read_buffer_size());
     from.async_read_some(boost::asio::buffer(buffer->data(), buffer->size()), 
-        m_strand.wrap([this, weak = weak_from_this(), buffer, &from, &to](const boost::system::error_code& ec, std::size_t size)
+        boost::asio::bind_executor(m_strand, [this, weak = weak_from_this(), buffer, &from, &to](const boost::system::error_code& ec, std::size_t size)
         {
             auto self = weak.lock();
             if (!self)
@@ -435,7 +435,7 @@ void tcp_relay::transmit_data(boost::asio::ip::tcp::socket& from, boost::asio::i
                 m_timestamp = std::chrono::steady_clock::now();
                 
                 boost::asio::async_write(to, boost::asio::buffer(buffer->data(), size),
-                    m_strand.wrap([this, weak = weak_from_this(), &from, &to](const boost::system::error_code& ec, std::size_t)
+                    boost::asio::bind_executor(m_strand, [this, weak = weak_from_this(), &from, &to](const boost::system::error_code& ec, std::size_t)
                     {
                         auto self = weak.lock();
                         if (!self)
@@ -538,7 +538,7 @@ void udp_relay::close()
 void udp_relay::watch_activity(boost::posix_time::seconds timeout)
 {
     m_timer.expires_from_now(timeout);
-    m_timer.async_wait(m_strand.wrap([this, weak = weak_from_this(), timeout](const boost::system::error_code& ec)
+    m_timer.async_wait(boost::asio::bind_executor(m_strand, [this, weak = weak_from_this(), timeout](const boost::system::error_code& ec)
     {
         auto self = weak.lock();
         if (!self)
@@ -574,7 +574,7 @@ void udp_relay::read_socket()
     auto peer = std::make_shared<boost::asio::ip::udp::endpoint>();
 
     m_socket.async_receive_from(boost::asio::buffer(*buffer), *peer,
-        m_strand.wrap([this, weak = weak_from_this(), buffer, peer](const boost::system::error_code& ec, std::size_t size)
+        boost::asio::bind_executor(m_strand, [this, weak = weak_from_this(), buffer, peer](const boost::system::error_code& ec, std::size_t size)
         {
             auto self = weak.lock();
             if (!self)
@@ -615,7 +615,7 @@ void udp_relay::read_socket()
                 {
                     m_timestamp = std::chrono::steady_clock::now();
                     m_socket.async_send_to(boost::asio::buffer(buffer->data(), size), *peer == m_one ? m_two : m_one, 
-                        m_strand.wrap([this, weak, peer](const boost::system::error_code& ec, std::size_t)
+                        boost::asio::bind_executor(m_strand, [this, weak, peer](const boost::system::error_code& ec, std::size_t)
                     {
                         auto self = weak.lock();
                         if (!self)
