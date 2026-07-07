@@ -9,9 +9,7 @@
  */
 
 #include <boost/asio.hpp>
-#if defined(__APPLE__) || defined(__linux__)
-#include <sys/socket.h>
-#endif
+
 #include <memory>
 #include <chrono>
 #include <cstdlib>
@@ -20,6 +18,20 @@
 #include "proto.h"
 #include "relay.h"
 #include "logging.h"
+
+#if defined(__APPLE__) || defined(__linux__)
+#include <sys/socket.h>
+#endif
+
+#ifdef _WIN32
+#include <mstcpip.h>
+#else
+#include <netinet/tcp.h>
+#endif
+
+#ifdef __APPLE__
+#define TCP_KEEPIDLE TCP_KEEPALIVE
+#endif
 
 namespace ricochet {
 
@@ -36,6 +48,12 @@ template<class var_t> var_t getenv(const std::string& name, const var_t& def)
     }
 
     return def;
+}
+
+inline boost::posix_time::time_duration get_tcp_keepalive_timeout() noexcept(true)
+{
+    static boost::posix_time::milliseconds s_timeout(getenv("RICOCHET_TCP_KEEPALIVE_TIMEOUT", 30000l));
+    return s_timeout;
 }
 
 inline size_t get_tcp_read_buffer_size()
@@ -307,21 +325,30 @@ void tcp_relay::start_relay(const peer& one, const peer& two)
                                 && (ep2.address().is_unspecified() || ep.address() == ep2.address())
                                 && (ep2.port() == 0 || ep.port() == ep2.port());
 
-                if (one_matches)
+                if (one_matches || two_matches)
                 {
                     _dbg_ << "TCP relay " << this << " accepted peer " << ep;
 
-                    m_one = std::move(*peer);
                     boost::system::error_code ec;
-                    m_one.set_option(boost::asio::ip::tcp::no_delay(true), ec);
-                }
-                else if (two_matches)
-                {
-                    _dbg_ << "TCP relay " << this << " accepted peer " << ep;
-
-                    m_two = std::move(*peer);
-                    boost::system::error_code ec;
-                    m_two.set_option(boost::asio::ip::tcp::no_delay(true), ec);
+                    peer->set_option(boost::asio::ip::tcp::no_delay(true), ec);
+                    peer->set_option(boost::asio::socket_base::keep_alive(true), ec);
+#ifdef _WIN32
+                    tcp_keepalive keepalive;
+                    keepalive.onoff = 1;
+                    keepalive.keepalivetime = std::max(5000UL, static_cast<unsigned long>(get_tcp_keepalive_timeout().total_milliseconds()));
+                    keepalive.keepaliveinterval = 1000UL;
+                    DWORD returned = 0;
+                    WSAIoctl(peer->native_handle(), SIO_KEEPALIVE_VALS, &keepalive, sizeof(keepalive), NULL, 0, &returned, NULL, NULL);
+#else
+                    int32_t timeout = std::max(5, static_cast<int32_t>(get_tcp_keepalive_timeout().total_seconds()));
+                    setsockopt(peer->native_handle(), IPPROTO_TCP, TCP_KEEPIDLE, &timeout, sizeof(timeout));
+                    timeout = 1;
+                    setsockopt(peer->native_handle(), IPPROTO_TCP, TCP_KEEPINTVL, &timeout, sizeof(timeout));
+#endif
+                    if (one_matches)
+                        m_one = std::move(*peer);
+                    else
+                        m_two = std::move(*peer);
                 }
                 else
                 {
@@ -377,20 +404,26 @@ void tcp_relay::start_relay(const peer& one, const peer& two)
             {
                 _dbg_ << "TCP relay " << this << " connected to peer " << ep;
 
+                boost::system::error_code ec;
+                peer->set_option(boost::asio::ip::tcp::no_delay(true), ec);
+                peer->set_option(boost::asio::socket_base::keep_alive(true), ec);
+#ifdef _WIN32
+                tcp_keepalive keepalive;
+                keepalive.onoff = 1;
+                keepalive.keepalivetime = std::max(5000UL, static_cast<unsigned long>(get_tcp_keepalive_timeout().total_milliseconds()));
+                keepalive.keepaliveinterval = 1000UL;
+                DWORD returned = 0;
+                WSAIoctl(peer->native_handle(), SIO_KEEPALIVE_VALS, &keepalive, sizeof(keepalive), NULL, 0, &returned, NULL, NULL);
+#else
+                int32_t timeout = std::max(5, static_cast<int32_t>(get_tcp_keepalive_timeout().total_seconds()));
+                setsockopt(peer->native_handle(), IPPROTO_TCP, TCP_KEEPIDLE, &timeout, sizeof(timeout));
+                timeout = 1;
+                setsockopt(peer->native_handle(), IPPROTO_TCP, TCP_KEEPINTVL, &timeout, sizeof(timeout));
+#endif
                 if (ep.address() == one.location().address() && ep.port() == one.location().port())
-                {
                     m_one = std::move(*peer);
-
-                    boost::system::error_code ec;
-                    m_one.set_option(boost::asio::ip::tcp::no_delay(true), ec);
-                }
                 else
-                {
                     m_two = std::move(*peer);
-
-                    boost::system::error_code ec;
-                    m_two.set_option(boost::asio::ip::tcp::no_delay(true), ec);
-                }
 
                 m_reconnects = 0;
                 start_relay(one, two);
