@@ -61,7 +61,7 @@ Accepted file extensions: `.pem` and `.crt`.
 
 ```console
 $ ./ricochet --help
-$ ./ricochet --bind-addr=0.0.0.0 --bind-port=443 --cert=server.pem --key=server.key --repo=.
+$ ./ricochet --address=0.0.0.0 --port=443 --cert=server.pem --key=server.key --repo=.
 ```
 
 Server options:
@@ -69,7 +69,8 @@ Server options:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--address` | `0.0.0.0` | Listen address |
-| `--port` | `443` | Listen port |
+| `--port` | `7411` | Listen port |
+| `--span` | `100` | Span of relay ports (next to the listen port) |
 | `--cert` | `server.pem` | Server certificate |
 | `--key` | `server.key` | Server private key |
 | `--ca` | — | CA for client verification (optional) |
