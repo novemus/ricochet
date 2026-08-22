@@ -23,20 +23,22 @@ find_package(OpenSSL REQUIRED)
 include_directories(${CMAKE_SOURCE_DIR})
 include_directories(${Boost_INCLUDE_DIRS})
 
-add_executable(ricochet
-    src/proto.cpp
-    src/session.cpp
-    src/relay.cpp
-    src/repo.cpp
-    src/server.cpp
-    src/logging.cpp
-    src/main.cpp
-)
+if (NOT ANDROID)
+    add_executable(ricochet
+        src/proto.cpp
+        src/session.cpp
+        src/relay.cpp
+        src/repo.cpp
+        src/server.cpp
+        src/logging.cpp
+        src/main.cpp
+    )
 
-target_link_libraries(ricochet Boost::coroutine Boost::program_options Boost::log OpenSSL::Crypto OpenSSL::SSL)
-target_include_directories(ricochet PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR})
-set_target_properties(ricochet PROPERTIES DEBUG_POSTFIX "d")
-target_compile_definitions(ricochet PRIVATE LIBRICOCHET_STATIC_DEFINE)
+    target_link_libraries(ricochet Boost::coroutine Boost::program_options Boost::log OpenSSL::Crypto OpenSSL::SSL)
+    target_include_directories(ricochet PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR})
+    set_target_properties(ricochet PROPERTIES DEBUG_POSTFIX "d")
+    target_compile_definitions(ricochet PRIVATE LIBRICOCHET_STATIC_DEFINE)
+endif()
 
 include(GenerateExportHeader)
 
@@ -75,7 +77,9 @@ if (NOT CMAKE_SKIP_INSTALL_RULES)
     configure_package_config_file(cmake/ricochet-config.cmake.in ricochet-config.cmake INSTALL_DESTINATION "${RICICHET_INSTALL_CMAKEDIR}")
     write_basic_package_version_file(ricochet-config-version.cmake COMPATIBILITY SameMajorVersion)
 
+if (NOT ANDROID)
     install(TARGETS ricochet RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}" COMPONENT server_files)
+endif()
 
     install(TARGETS libricochet EXPORT ricochet_export
         RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}" COMPONENT client_files
