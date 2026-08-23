@@ -12,7 +12,7 @@
 #include <string>
 #include "fixture.h"
 
-integration_test_fixture::context::context() : repo(std::filesystem::path(TEST_CONTEXT_DIR) / "repo")
+integration_test_fixture::context::context() : repo(std::filesystem::path("certs") / "repo")
 {
     ca_cert = repo.parent_path() / "ca.crt";
     server_cert = repo.parent_path() / "server.crt";

@@ -129,28 +129,7 @@ endif()
 
 enable_testing()
 
-set(TEST_CONTEXT_DIR "${CMAKE_CURRENT_BINARY_DIR}/test_context")
-file(MAKE_DIRECTORY "${TEST_CONTEXT_DIR}/repo/test_client/localhost")
-
-if(WIN32)
-    configure_file("${CMAKE_SOURCE_DIR}/tests/certs/ca.crt" "${TEST_CONTEXT_DIR}/ca.crt" COPYONLY)
-    configure_file("${CMAKE_SOURCE_DIR}/tests/certs/server.crt" "${TEST_CONTEXT_DIR}/server.crt" COPYONLY)
-    configure_file("${CMAKE_SOURCE_DIR}/tests/certs/server.pem" "${TEST_CONTEXT_DIR}/server.pem" COPYONLY)
-    configure_file("${CMAKE_SOURCE_DIR}/tests/certs/server.key" "${TEST_CONTEXT_DIR}/server.key" COPYONLY)
-    configure_file("${CMAKE_SOURCE_DIR}/tests/certs/client.crt" "${TEST_CONTEXT_DIR}/repo/test_client/localhost/client.crt" COPYONLY)
-    configure_file("${CMAKE_SOURCE_DIR}/tests/certs/client.pem" "${TEST_CONTEXT_DIR}/repo/test_client/localhost/client.pem" COPYONLY)
-    configure_file("${CMAKE_SOURCE_DIR}/tests/certs/client.key" "${TEST_CONTEXT_DIR}/repo/test_client/localhost/client.key" COPYONLY)
-else()
-    file(CREATE_LINK "${CMAKE_SOURCE_DIR}/tests/certs/ca.crt" "${TEST_CONTEXT_DIR}/ca.crt" SYMBOLIC)
-    file(CREATE_LINK "${CMAKE_SOURCE_DIR}/tests/certs/server.crt" "${TEST_CONTEXT_DIR}/server.crt" SYMBOLIC)
-    file(CREATE_LINK "${CMAKE_SOURCE_DIR}/tests/certs/server.pem" "${TEST_CONTEXT_DIR}/server.pem" SYMBOLIC)
-    file(CREATE_LINK "${CMAKE_SOURCE_DIR}/tests/certs/server.key" "${TEST_CONTEXT_DIR}/server.key" SYMBOLIC)
-    file(CREATE_LINK "${CMAKE_SOURCE_DIR}/tests/certs/client.crt" "${TEST_CONTEXT_DIR}/repo/test_client/localhost/client.crt" SYMBOLIC)
-    file(CREATE_LINK "${CMAKE_SOURCE_DIR}/tests/certs/client.pem" "${TEST_CONTEXT_DIR}/repo/test_client/localhost/client.pem" SYMBOLIC)
-    file(CREATE_LINK "${CMAKE_SOURCE_DIR}/tests/certs/client.key" "${TEST_CONTEXT_DIR}/repo/test_client/localhost/client.key" SYMBOLIC)
-endif()
-
-add_executable(ricochet_tests
+add_executable(ricochet_ut
     src/proto.cpp
     src/repo.cpp
     src/relay.cpp
@@ -174,14 +153,12 @@ add_executable(ricochet_tests
     tests/integration/agent.cpp
 )
 
-target_link_libraries(ricochet_tests Boost::coroutine Boost::log Boost::unit_test_framework OpenSSL::Crypto OpenSSL::SSL)
+target_link_libraries(ricochet_ut Boost::coroutine Boost::log Boost::unit_test_framework OpenSSL::Crypto OpenSSL::SSL)
 
-target_include_directories(ricochet_tests PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR})
-set_target_properties(ricochet_tests PROPERTIES DEBUG_POSTFIX "d")
+target_include_directories(ricochet_ut PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR})
+set_target_properties(ricochet_ut PROPERTIES DEBUG_POSTFIX "d")
 
-target_compile_definitions(ricochet_tests PRIVATE LIBRICOCHET_STATIC_DEFINE TEST_CONTEXT_DIR="${TEST_CONTEXT_DIR}")
-
-add_test(NAME ricochet_tests COMMAND ricochet_tests)
+add_test(NAME ricochet_ut COMMAND ricochet_ut WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/tests")
 
 ########## packages ##########
 
