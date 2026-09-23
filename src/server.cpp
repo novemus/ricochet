@@ -94,59 +94,67 @@ void server::accept()
 
         if (!ec)
         {
-            _dbg_ << "New connection accepted from " << socket->lowest_layer().remote_endpoint();
-            socket->async_handshake(boost::asio::ssl::stream_base::server, [this, weak, socket](const boost::system::error_code& ec)
+            try 
             {
-                auto self = weak.lock();
-                if (!self)
-                    return;
+                _dbg_ << "New connection accepted from " << socket->lowest_layer().remote_endpoint();
 
-                if (!ec)
+                socket->async_handshake(boost::asio::ssl::stream_base::server, [this, weak, socket](const boost::system::error_code& ec)
                 {
-                    _dbg_ << "SSL handshake successful for " << socket->lowest_layer().remote_endpoint();
+                    auto self = weak.lock();
+                    if (!self)
+                        return;
 
-                    try
+                    if (!ec)
                     {
-                        X509Ptr cert(SSL_get_peer_certificate(socket->native_handle()));
-                        if (!cert)
-                            throw std::runtime_error("No peer certificate");
-
-                        std::string hash = ricochet::repository::get_certificate_hash(cert.get());
-
-                        std::lock_guard<std::mutex> lock(m_mutex);
-
-                        auto relay = std::make_shared<session>(m_io, m_ssl, socket, m_heap, m_config.wait_timeout, m_config.idle_timeout);
-                        bool reject = !check_limits(hash);
-
-                        m_relays[hash].insert(relay);
-                        _inf_ << "Added client " << hash.substr(0, 16) << " session " << relay.get() << ", count=" << m_relays[hash].size();
-
-                        relay->start(reject, [this, weak = weak_from_this(), hash, hook = relay->weak_from_this()]() 
+                        try
                         {
-                            if (auto self = weak.lock())
+                            _dbg_ << "SSL handshake successful for " << socket->lowest_layer().remote_endpoint();
+
+                            X509Ptr cert(SSL_get_peer_certificate(socket->native_handle()));
+                            if (!cert)
+                                throw std::runtime_error("No peer certificate");
+
+                            std::string hash = ricochet::repository::get_certificate_hash(cert.get());
+
+                            std::lock_guard<std::mutex> lock(m_mutex);
+
+                            auto relay = std::make_shared<session>(m_io, m_ssl, socket, m_heap, m_config.wait_timeout, m_config.idle_timeout);
+                            bool reject = !check_limits(hash);
+
+                            m_relays[hash].insert(relay);
+                            _inf_ << "Added client " << hash.substr(0, 16) << " session " << relay.get() << ", count=" << m_relays[hash].size();
+
+                            relay->start(reject, [this, weak = weak_from_this(), hash, hook = relay->weak_from_this()]() 
                             {
-                                std::lock_guard<std::mutex> lock(m_mutex);
+                                if (auto self = weak.lock())
+                                {
+                                    std::lock_guard<std::mutex> lock(m_mutex);
 
-                                auto relay = hook.lock();
-                                m_relays[hash].erase(relay);
+                                    auto relay = hook.lock();
+                                    m_relays[hash].erase(relay);
 
-                                _inf_ << "Removed client " << hash.substr(0, 16) << " session " << relay.get() << ", count=" << m_relays[hash].size();
+                                    _inf_ << "Removed client " << hash.substr(0, 16) << " session " << relay.get() << ", count=" << m_relays[hash].size();
 
-                                if (m_relays[hash].empty())
-                                    m_relays.erase(hash);
-                            }
-                        });
+                                    if (m_relays[hash].empty())
+                                        m_relays.erase(hash);
+                                }
+                            });
+                        }
+                        catch (const std::exception& e)
+                        {
+                            _wrn_ << "Can't create session: " << e.what();
+                        }
                     }
-                    catch (const std::exception& e)
+                    else
                     {
-                        _wrn_ << "Can't create session: " << e.what();
+                        _wrn_ << "SSL handshake failed: " << ec.message();
                     }
-                }
-                else
-                {
-                    _wrn_ << "SSL handshake failed: " << ec.message();
-                }
-            });
+                });
+            }
+            catch (const std::exception& e)
+            {
+                _wrn_ << "Can't start SSL handshake: " << e.what();
+            }
         }
         else
         {
