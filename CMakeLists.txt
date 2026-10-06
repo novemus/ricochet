@@ -157,6 +157,7 @@ target_link_libraries(ricochet_ut Boost::coroutine Boost::log Boost::unit_test_f
 
 target_include_directories(ricochet_ut PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR})
 set_target_properties(ricochet_ut PROPERTIES DEBUG_POSTFIX "d")
+target_compile_definitions(ricochet_ut PRIVATE LIBRICOCHET_STATIC_DEFINE)
 
 add_test(NAME ricochet_ut COMMAND ricochet_ut WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/tests")
 
