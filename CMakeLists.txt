@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(ricochet VERSION 1.0.0 DESCRIPTION "Relay server for non-public p2p applications" LANGUAGES CXX)
+project(ricochet VERSION 1.0.1 DESCRIPTION "Relay server for non-public p2p applications" LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
